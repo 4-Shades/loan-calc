@@ -1,0 +1,33 @@
+// Mirrors the logical schema in software_requirements_specification.md §3.3.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model LoanProduct {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category  String    @db.VarChar(20) // 'PERSONAL' or 'BUSINESS'
+  typeCode  String    @map("type_code") @db.VarChar(50) // 'FIXED_INSTALLMENT', 'MCA', 'EQUIPMENT', ...
+  name      String    @db.VarChar(100)
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("loan_products")
+}
+
+model SavedCalculation {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title          String    @db.VarChar(150)
+  loanType       String    @map("loan_type") @db.VarChar(50)
+  inputs         Json // full parameter dump (principal, rate, term, fees, ...)
+  summaryResults Json      @map("summary_results") // total_interest, monthly_payment, effective_apr
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([createdAt(sort: Desc)], map: "idx_calculations_created")
+  @@map("saved_calculations")
+}

@@ -25,9 +25,9 @@ Feature: Personal Loan Amortization Calculations
 
     Examples:
       | principal | apr   | term_months | frequency | expected_payment | expected_total_interest | expected_periods |
-      | 10000     | 5.00  | 24          | Monthly   | 438.71           | 529.04                  | 24               |
-      | 25000     | 8.50  | 60          | Monthly   | 512.91           | 5774.60                 | 60               |
-      | 5000      | 12.00 | 12          | Monthly   | 444.24           | 330.88                  | 12               |
+      | 10000     | 5.00  | 24          | Monthly   | 438.71           | 529.15                  | 24               |
+      | 25000     | 8.50  | 60          | Monthly   | 512.91           | 5774.86                 | 60               |
+      | 5000      | 12.00 | 12          | Monthly   | 444.24           | 330.93                  | 12               |
 
   @REQ-FUNC-PL03
   Scenario: Acceleration of loan payoff via recurring extra payments
