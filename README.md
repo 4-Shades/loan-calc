@@ -44,6 +44,8 @@ npm run dev               # http://localhost:3000
 
 Errors are always JSON: `{ "error": "...", "details"?: [{ "path", "message" }] }`.
 
+Every response carries security headers (Content-Security-Policy, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`). The CSP allows inline scripts because Next.js needs them for statically prerendered pages; everything else is limited to this origin.
+
 Rate limiting is in memory, per process. The client IP comes from `x-forwarded-for`, which clients can set themselves unless a reverse proxy overwrites it, so put the app behind one in production; a global cap of 600 saves/minute applies regardless.
 
 ## Scripts
@@ -57,8 +59,9 @@ Rate limiting is in memory, per process. The client IP comes from `x-forwarded-f
 | `npm run test:coverage` | Unit + component tests with coverage gates (engine 90%, overall 80%) |
 | `npm run test:integration` | API route handlers against PostgreSQL 16 in Testcontainers (needs Docker) |
 | `npm run test:perf` | Engine performance budgets (REQ-NFR-PERF1), run on their own |
-| `npm run test:e2e` | Playwright-BDD from `features/*.feature` against a fresh production build on port 3100 (needs `DATABASE_URL`, e.g. `npm run db:up`) |
+| `npm run test:e2e` | Playwright against a fresh production build on port 3100: BDD scenarios from `features/*.feature` plus responsive, accessibility (axe, WCAG 2.1 AA) and security specs (needs `DATABASE_URL`, e.g. `npm run db:up`) |
 | `npm run test:compose` | Systems test: builds and runs the full Compose stack as a throwaway project (REQ-INT-002) |
+| `npm run test:lighthouse` | Lighthouse desktop preset, median of 3 runs; fails if First Contentful Paint ≥ 1.2 s (REQ-NFR-PERF2). Needs Chrome, or set `CHROME_PATH` (e.g. to Edge) |
 | `npm run db:up` / `db:migrate` | Start PostgreSQL and apply migrations / apply migrations only |
 | `npm run db:generate` / `db:validate` | Prisma client generation / schema validation |
 
@@ -71,7 +74,8 @@ tests/component/     React Testing Library tests (jsdom)
 tests/integration/   API + PostgreSQL tests (Testcontainers)
 tests/perf/          Timing budgets
 tests/e2e/steps/     Playwright-BDD step definitions
-scripts/             Compose systems test
+tests/e2e/specs/     Responsive, accessibility and security checks
+scripts/             Compose systems test, Lighthouse budget
 ```
 
 Scenarios without step definitions are skipped, not failed. Each slice adds steps for the scenarios it delivers.

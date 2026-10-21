@@ -51,7 +51,7 @@ export function BreakdownChart({ rows }: { rows: readonly ScheduleRow[] }) {
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-xs text-zinc-500">Total paid</span>
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">Total paid</span>
           <span className="text-base font-semibold text-zinc-900 dark:text-zinc-50">{formatCents(total)}</span>
         </div>
       </div>
@@ -61,7 +61,7 @@ export function BreakdownChart({ rows }: { rows: readonly ScheduleRow[] }) {
             <span aria-hidden="true" className="inline-block size-2.5 rounded-sm" style={{ background: sliceColor(slice, theme) }} />
             <span className="text-zinc-700 dark:text-zinc-300">{slice.label}</span>
             <span className="ml-auto font-medium tabular-nums text-zinc-900 dark:text-zinc-50">{formatCents(slice.cents)}</span>
-            <span className="w-14 text-right tabular-nums text-zinc-500">{share(slice.cents)}</span>
+            <span className="w-14 text-right tabular-nums text-zinc-500 dark:text-zinc-400">{share(slice.cents)}</span>
           </li>
         ))}
       </ul>
@@ -81,7 +81,7 @@ function SliceTooltip({ share, active, payload }: SliceTooltipProps) {
   return (
     <div className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
       <p className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{formatCents(slice.cents)}</p>
-      <p className="text-zinc-500">
+      <p className="text-zinc-500 dark:text-zinc-400">
         {slice.label} · {share(slice.cents)}
       </p>
     </div>

@@ -9,6 +9,8 @@ const eslintConfig = defineConfig([
     rules: {
       // REQ-NFR-CODE1: no `any` overrides.
       "@typescript-eslint/no-explicit-any": "error",
+      // REQ-NFR-SEC1: React's escaping is the main XSS defence; never bypass it.
+      "react/no-danger": "error",
     },
   },
   // Override default ignores of eslint-config-next.

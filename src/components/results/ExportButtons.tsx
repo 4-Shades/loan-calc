@@ -42,7 +42,7 @@ export function ExportButtons({ heading, summary, rows }: ExportButtonsProps) {
       <button type="button" onClick={exportPdf} disabled={pdfState === "building"} className={buttonClass}>
         Export PDF
       </button>
-      {pdfState === "building" && <span className="text-sm text-zinc-500">Preparing PDF…</span>}
+      {pdfState === "building" && <span className="text-sm text-zinc-500 dark:text-zinc-400">Preparing PDF…</span>}
       {pdfState === "failed" && (
         <span role="alert" className="text-sm text-red-600 dark:text-red-400">
           Couldn&apos;t create the PDF. Please try again.

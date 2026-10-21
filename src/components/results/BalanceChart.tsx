@@ -107,7 +107,7 @@ function TimelineTooltip({ theme, active, payload }: TooltipProps) {
   if (!active || !point) return null;
   return (
     <div className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-      <p className="mb-1 text-zinc-500">
+      <p className="mb-1 text-zinc-500 dark:text-zinc-400">
         {point.period === 0 ? "Start" : `Payment ${point.period}`}
         {point.date ? ` · ${point.date}` : ""}
       </p>
@@ -117,7 +117,7 @@ function TimelineTooltip({ theme, active, payload }: TooltipProps) {
           <span className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
             {formatCents(Math.round(point[series.key] * 100))}
           </span>
-          <span className="text-zinc-500">{series.label}</span>
+          <span className="text-zinc-500 dark:text-zinc-400">{series.label}</span>
         </p>
       ))}
     </div>

@@ -6,7 +6,7 @@ import { defineBddConfig } from "playwright-bdd";
 // BDD acceptance tests: the .feature files are the source of truth (tdd_design.md §7).
 // Scenarios without step definitions yet are skipped rather than failing generation;
 // each slice adds steps and turns its scenarios green.
-const testDir = defineBddConfig({
+const bddTestDir = defineBddConfig({
   features: "features/**/*.feature",
   steps: "tests/e2e/steps/**/*.ts",
   missingSteps: "skip-scenario",
@@ -17,7 +17,6 @@ const testDir = defineBddConfig({
 const PORT = Number(process.env.E2E_PORT ?? 3100);
 
 export default defineConfig({
-  testDir,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -26,7 +25,12 @@ export default defineConfig({
     baseURL: `http://localhost:${PORT}`,
     trace: "on-first-retry",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    // Acceptance scenarios generated from features/*.feature.
+    { name: "bdd", testDir: bddTestDir, use: { ...devices["Desktop Chrome"] } },
+    // Cross-cutting checks with no Gherkin scenario: responsive layout, accessibility, security.
+    { name: "specs", testDir: "tests/e2e/specs", use: { ...devices["Desktop Chrome"] } },
+  ],
   webServer: {
     // Run against the production build, as the Next.js testing guide recommends.
     command: `npm run build && npm run start -- --port ${PORT}`,

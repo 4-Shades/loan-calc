@@ -79,14 +79,14 @@ export function SavedCalculations({ refreshKey }: { refreshKey: number }) {
         </button>
       </div>
 
-      {list.kind === "loading" && <p className="text-sm text-zinc-500">Loading saved calculations…</p>}
+      {list.kind === "loading" && <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading saved calculations…</p>}
       {list.kind === "error" && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           Couldn&apos;t load saved calculations.
         </p>
       )}
       {list.kind === "ready" && items.length === 0 && (
-        <p className="text-sm text-zinc-500">No saved calculations yet.</p>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">No saved calculations yet.</p>
       )}
       {list.kind === "ready" && items.length > 0 && (
         <>
@@ -107,7 +107,7 @@ export function SavedCalculations({ refreshKey }: { refreshKey: number }) {
                       className="size-4 accent-zinc-900 dark:accent-zinc-100"
                     />
                     <span className="flex-1 font-medium">{item.title}</span>
-                    <span className="text-sm text-zinc-500">
+                    <span className="text-sm text-zinc-500 dark:text-zinc-400">
                       {LOAN_TYPE_LABELS[item.loanType as LoanType] ?? item.loanType} ·{" "}
                       {new Date(item.createdAt).toLocaleDateString()}
                     </span>

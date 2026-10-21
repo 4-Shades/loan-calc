@@ -81,3 +81,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: npm run test:compose
+
+  lighthouse:
+    name: First Contentful Paint budget (REQ-NFR-PERF2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      # GitHub's Ubuntu runners ship Google Chrome, which chrome-launcher finds on its own.
+      - run: npm run test:lighthouse
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse-report
+          path: .lighthouse/report.html
+          retention-days: 7

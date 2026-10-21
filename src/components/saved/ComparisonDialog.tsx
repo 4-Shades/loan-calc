@@ -107,7 +107,7 @@ export function ComparisonDialog({ items, onClose }: ComparisonDialogProps) {
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
           Monthly payment is the regular payment converted to a monthly equivalent. Cost of borrowing counts
           interest and fees, so a factor-rate advance compares fairly with an interest-bearing loan.
         </p>

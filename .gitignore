@@ -41,6 +41,7 @@ yarn-error.log*
 /playwright-report/
 /test-results/
 /.features-gen/
+/.lighthouse/
 
 # vercel
 .vercel

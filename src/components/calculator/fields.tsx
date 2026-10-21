@@ -68,7 +68,7 @@ export function NumberField({ name, label, prefix, suffix, placeholder }: Number
   return (
     <FieldShell id={field.id} label={label} error={field.error}>
       <div className="flex items-center gap-2">
-        {prefix && <span aria-hidden="true" className="text-sm text-zinc-500">{prefix}</span>}
+        {prefix && <span aria-hidden="true" className="text-sm text-zinc-500 dark:text-zinc-400">{prefix}</span>}
         <input
           id={field.id}
           type="text"
@@ -80,7 +80,7 @@ export function NumberField({ name, label, prefix, suffix, placeholder }: Number
           className={inputClass}
           {...field.a11y}
         />
-        {suffix && <span aria-hidden="true" className="text-sm text-zinc-500">{suffix}</span>}
+        {suffix && <span aria-hidden="true" className="text-sm text-zinc-500 dark:text-zinc-400">{suffix}</span>}
       </div>
     </FieldShell>
   );

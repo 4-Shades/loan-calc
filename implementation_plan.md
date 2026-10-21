@@ -14,10 +14,10 @@ These are defaults I would use. Items marked **Open** come from TDD §8 and need
 | :-- | :--- | :--- | :--- |
 | D1 | ORM | Prisma (mature migrations, works with Testcontainers) | Proposed |
 | D2 | Charts | Recharts (React-native, simple donut + area charts) | Proposed |
-| D3 | UI kit | Tailwind + shadcn/ui | Per SRS |
+| D3 | Styling | Tailwind CSS v4, CSS-first (no config file), loaded through `@tailwindcss/turbopack`; native elements styled with utilities. shadcn/ui was not needed and not adopted | Decided |
 | D4 | Money arithmetic | Integer cents internally; round half-up per period | Proposed |
 | D5 | PDF export | `jspdf` + `jspdf-autotable`, client-side (SRS: "from SPA state") | Proposed |
-| D6 | Rate limiter | In-memory sliding window keyed by IP (single container) | Proposed |
+| D6 | Rate limiter | In-memory sliding window keyed by IP for the single container; a shared store on Vercel (D16) | Decided |
 | D7 | Engine location | Pure TS in `src/engine/`, imported by client and server | Per TDD |
 | D8 | Total-interest values in BDD | Corrected to the cent-rounded schedule totals (529.15 / 5774.86 / 330.93); asserted exactly | Decided |
 | D9 | Equipment residual | Balloon loan: level payments leaving the residual at term end, repaid with the final payment ($2,571.32 for the BDD case) | Decided |
@@ -25,6 +25,11 @@ These are defaults I would use. Items marked **Open** come from TDD §8 and need
 | D11 | Revolving minimum | % of current balance each period, no floor | Decided |
 | D12 | Fees on term/SBA loans | Deducted from proceeds: payments on the full amount, fees in a period-0 closing row, Effective APR on net proceeds. Applies to all business loan types | Decided |
 | D13 | Auth | None. The SRS defines no users; saved calculations are global | Per SRS |
+| D14 | Hosting | Vercel for production and per-PR preview deployments. Docker Compose stays for self-hosting and REQ-INT-002 | Proposed |
+| D15 | Database on Vercel | Managed PostgreSQL from the Vercel Marketplace (e.g. Neon): pooled connection string for the app, direct one for migrations | **Open** |
+| D16 | Rate limiting on Vercel | Shared store (e.g. Upstash Redis from the Marketplace) behind a `RateLimiter` interface; in-memory stays for Docker and tests. Optionally a Vercel Firewall rate-limit rule as an outer layer | **Open** |
+| D17 | Migrations on Vercel | `prisma migrate deploy` from CI before promoting to production, never inside the Vercel build (so a preview build can't migrate production) | Proposed |
+| D18 | Preview databases | A database branch per preview deployment, or one shared staging database | **Open** |
 
 ---
 
@@ -55,6 +60,31 @@ Dockerfile  docker-compose.yml  .github/workflows/ci.yml
 ```
 
 **Data flow:** form state → Zod parse → `calculate()` (client, sync) → `{summary, schedule}` → table, charts, summary cards. Saving posts `{title, loanType, inputs, summary}` to `/api/calculations`. The server re-validates with the same Zod schema and re-runs `calculate()` to confirm `summary_results` matches the inputs, so a client cannot store forged results.
+
+### Styling (Tailwind CSS)
+
+- **Setup:** Tailwind CSS v4, configured CSS-first. `src/app/globals.css` has `@import "tailwindcss"` and an `@theme inline` block for the background/foreground tokens and Geist fonts. There is no `tailwind.config` or PostCSS file; `next.config.ts` registers the `@tailwindcss/turbopack` loader for `*.css`. Unused utilities are dropped automatically at build time.
+- **Conventions:**
+  - Utility classes directly in components, with the zinc scale for neutrals.
+  - Muted text is always `text-zinc-500 dark:text-zinc-400`; zinc-500 alone fails 4.5:1 contrast in dark mode (found by axe in Slice 8).
+  - Red for field errors, amber for calculation alerts, green and blue only for comparison highlights, always paired with a text badge.
+  - Class names stay complete static strings (no `bg-${color}-50` built at runtime), so Tailwind's source scan can find them.
+- **Dark mode:** `dark:` variants follow the OS setting (Tailwind v4's default `prefers-color-scheme` strategy). There is no in-app theme toggle.
+- **Layout:** mobile-first, using Tailwind's default breakpoints: `sm` 640 px, `md` 768 px, `lg` 1024 px. Form and results sit side by side from `lg`. The responsive E2E spec checks 320, 768 and 1024 px.
+- **Charts are the exception:** their colors come from the validated palette in `src/components/results/chartTheme.ts`, as hex values. Recharts writes SVG attributes, where Tailwind classes and CSS variables aren't reliable.
+- **Testing:** no class-name snapshots; tests assert behavior through roles and labels. Tailwind v4 colors are `oklch()`, so E2E checks that read computed colors convert them through a canvas first (see `tests/e2e/steps/comparison.steps.ts`). axe-core catches contrast regressions in both themes.
+
+### Deployment targets
+
+```
+                ┌─ Vercel (D14): production on main, a preview per PR ─────────────┐
+GitHub ─ push ──┤  Next.js build (no standalone output) → Functions + edge CDN     ├──► managed PostgreSQL (D15)
+                └──────────────────────────────────────────────────────────────────┘     pooled URL for the app,
+                                                                                          direct URL for migrations (D17)
+Self-hosted ──── docker compose up --build: postgres → migrate → app (SRS §3.5, REQ-INT-002)
+```
+
+Both targets build the same code. Only configuration differs: output mode, database URLs, and the rate-limit store.
 
 ---
 
@@ -187,6 +217,44 @@ Each slice lists its tests first (Red), then the work (Green), then the exit che
 - README: run, test and docker instructions. Final traceability check against TDD §2.
 
 **Exit:** every row of the TDD traceability matrix has a passing test; CI runs unit, component, integration, E2E, Lighthouse and the compose smoke test.
+- **Status:** done. Traceability matrix (TDD §2) updated with the real test files; every requirement has a passing check. Results:
+  - Responsive (UI-002): no horizontal page scroll and all controls inside the viewport at 320, 768 and 1024 px, for every loan type; results sit beside the form from 1024 px, below it otherwise; the schedule table scrolls inside its own box.
+  - Lighthouse (PERF2, desktop preset = 40 ms RTT / 10 Mbps): median FCP 227 ms, performance score 100 (budget < 1.2 s).
+  - Accessibility: axe-core finds no WCAG 2.1 A/AA violations in light or dark mode across calculator, business forms, validation errors, alerts and the comparison dialog; every control is keyboard reachable. Fixed: muted text was 4.3:1 in dark mode (now zinc-400, about 8:1).
+  - Security: CSP and hardening headers on every route, `X-Powered-By` removed, no CORS grant; the app runs under the CSP with no violations (including PDF/CSV export); markup inserted straight into the database renders as text; ESLint forbids `dangerouslySetInnerHTML`.
+  - CSP uses Next's "without nonces" policy (`'unsafe-inline'` scripts): nonces would force dynamic rendering and are incompatible with partial prerendering. `upgrade-insecure-requests` and HSTS are left to the HTTPS reverse proxy.
+
+### Slice 9: Vercel hosting (D14–D18)
+
+SRS §3.5 requires deployment with Docker Compose, so Vercel is an *additional* target: the Compose path stays as it is, and its smoke test stays in CI.
+
+- **Red:**
+  - Config test: `output` is `"standalone"` except when `VERCEL` is set.
+  - `dbConfig` tests with managed-Postgres URLs (pooler host, `sslmode=require`) give verified TLS. Pool size comes from `DATABASE_POOL_MAX`.
+  - `clientIp` tests: on Vercel, trust the client IP its edge sets (`x-vercel-forwarded-for`, or `x-forwarded-for`, which Vercel overwrites). Elsewhere, behavior is unchanged.
+  - Rate-limiter **contract tests** run against both stores: memory, and Redis via Testcontainers. Same 60/min per IP, same 429 with `Retry-After`, same global cap.
+  - E2E: an `E2E_BASE_URL` mode that skips Playwright's `webServer` and targets a deployed preview. Scenarios that seed rows with direct SQL get a `@db-direct` tag and are skipped for remote runs, unless a preview `DATABASE_URL` secret is provided.
+- **Green:**
+  - `next.config.ts`: `output: process.env.VERCEL ? undefined : "standalone"`. Security headers already come from `next.config.ts`, so they apply on Vercel unchanged.
+  - `RateLimiter` interface with an async `check`, plus `memory` and `redis` implementations chosen by environment variables (e.g. `RATE_LIMIT_STORE`, plus the store's URL and token). The API route awaits it.
+  - `db.ts`: small pool per function instance (`DATABASE_POOL_MAX`, e.g. 3) on the pooled connection string. Idle clients are released when an instance suspends; Vercel provides a helper for this in `@vercel/functions` (check the current API when implementing).
+  - `prisma.config.ts`: migrations use `DIRECT_URL` when it is set (`process.env.DIRECT_URL ?? process.env.DATABASE_URL`); the app keeps using the pooled `DATABASE_URL`.
+  - Vercel project settings:
+    - Next.js framework preset, Node 24.
+    - Function region co-located with the database.
+    - Environment variables per environment (Production, Preview, Development): `DATABASE_URL` (pooled), `DIRECT_URL`, rate-limit store credentials. The local `.env` is never uploaded.
+  - CI:
+    - Vercel's Git integration builds a preview per PR and production from `main`.
+    - A GitHub Actions job runs `prisma migrate deploy` against `DIRECT_URL` before production promotion (D17).
+    - On a successful preview deployment, the E2E suite (BDD + specs) and the Lighthouse budget run against the preview URL. If Vercel Deployment Protection is on, they send Vercel's protection-bypass token for automation.
+  - HTTPS: Vercel serves HTTPS and HSTS on its domains, which covers what Slice 8 left to a reverse proxy. Confirm the HSTS setting for any custom domain.
+  - Docs: a "Deploy to Vercel" section in the README, covering env vars, region, migrations and preview databases.
+- **Exit:**
+  - A preview deployment passes the BDD + specs suite and the Lighthouse budget, run against its URL.
+  - Production serves `/api/health` with `200` against the managed database.
+  - The rate limit holds across function instances: the contract tests pass against Redis, and the 429 scenario passes on the preview.
+  - The Docker Compose smoke test still passes.
+- **Status:** not started. Needs D15, D16 and D18 decided, plus a Vercel project with access to the GitHub repository.
 
 ---
 
@@ -198,7 +266,13 @@ Each slice lists its tests first (Red), then the work (Green), then the exit che
 | Under-50 ms target missed with large schedules or charts | Engine benchmark budget; virtualized table; chart animations off; memoize; downsample chart points above ~120 |
 | Spec ambiguity (D8–D12) | Resolve before the matching slice; record the answer in the BDD so it stays the source of truth |
 | IRR solver divergence on extreme inputs | Bounded bisection fallback; explicit error type shown in the UI |
-| In-memory rate limiter resets on restart / not shared across instances | Acceptable for the single-container deployment; documented limitation |
+| In-memory rate limiter resets on restart / not shared across instances | Acceptable for the single-container deployment; documented limitation. On Vercel, a shared store (D16) |
+| SRS §3.5 requires Docker Compose; Vercel is a different runtime | Keep both targets from the same code; the Compose smoke test stays in CI so the SRS path never regresses |
+| On Vercel each serverless instance would count requests separately, so 60/min per IP wouldn't hold | Shared rate-limit store behind one interface (D16); contract tests run against both stores |
+| Serverless instances exhausting PostgreSQL connections | Pooled connection string, small per-instance pool, idle clients released on suspend |
+| Preview deployments migrating or polluting production data | Migrations only from CI with `DIRECT_URL` (D17); preview env vars point at a preview or staging database (D18) |
+| Cold starts on API routes | Calculations run in the browser, so PERF1 is unaffected; only save/list latency changes. Co-locate the function region with the database |
+| E2E steps that write SQL directly can't reach a remote database | Tag them `@db-direct` and skip them for remote runs, or provide a preview database secret |
 | E2E flakiness on timing assertions | Measure with `performance.measure` in-page, use p95 over many samples, fixed CI profile |
 | Server-side recompute disagrees with client due to environment differences | Same engine module, no `Date.now()` or locale dependence inside it; dates passed in |
 
@@ -215,7 +289,8 @@ Each slice lists its tests first (Red), then the work (Green), then the exit che
 | 6 Docker + DB + API | 2 days |
 | 7 Comparison + export | 1.5 days |
 | 8 Hardening | 1.5 days |
-| **Total** | **about 13 days** for one developer |
+| 9 Vercel hosting | 2 days |
+| **Total** | **about 15 days** for one developer |
 
 ## 6. Suggested First Commands (Slice 0)
 

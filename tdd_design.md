@@ -64,30 +64,34 @@ tests/unit/  tests/component/  tests/integration/  tests/e2e/
 
 ## 2. Requirement-to-Test Traceability Matrix
 
-| Requirement | BDD scenario | Level | Test file(s) |
+Final state after Slice 8. Every requirement has at least one passing automated check. Paths are relative to `tests/` unless noted; "BDD" means the scenario in `features/` runs in Playwright.
+
+| Requirement | BDD scenario | Level | Tests |
 | :--- | :--- | :--- | :--- |
-| REQ-FUNC-PL01 | Standard fixed-rate; Revolving LOC | Unit + E2E | `payment.test.ts`, `revolving.test.ts` |
-| REQ-FUNC-PL02 | Standard fixed-rate (Outline) | Unit + Zod | `payment.test.ts`, `personalSchema.test.ts` |
-| REQ-FUNC-PL03 | Acceleration via extra payments | Unit + E2E | `extraPayments.test.ts` |
-| REQ-FUNC-BL01 | MCA; Grace period; Equipment | Unit | `mca.test.ts`, `grace.test.ts`, `equipment.test.ts`, `term.test.ts` |
-| REQ-FUNC-BL02 | Grace period; MCA | Unit + Zod | `businessSchema.test.ts` |
-| REQ-FUNC-BL03 | MCA Effective APR | Unit | `irr.test.ts`, `mca.test.ts` |
-| REQ-FUNC-AN01 | (implicit in all schedules) | Unit + property | `schedule.test.ts`, `schedule.property.test.ts` |
-| REQ-FUNC-AN02 | none (gap, see §8) | Component | `charts.test.tsx` |
-| REQ-FUNC-DB01 | Save to PostgreSQL | Integration + E2E | `calculations.api.test.ts` |
-| REQ-FUNC-DB02 | Comparison matrix | Component + E2E | `ComparisonMatrix.test.tsx` |
-| REQ-FUNC-DB03 | Export CSV | Unit + E2E | `csv.test.ts` |
-| REQ-UI-001 | Slider recalculation | E2E | `spa.e2e.ts` |
-| REQ-UI-002 | none (gap, see §8) | E2E (viewports) | `responsive.e2e.ts` |
-| REQ-UI-003 | Background steps (mode set) | Component + E2E | `ModeToggle.test.tsx` |
-| REQ-INT-001 | none | Integration | `db.ssl.test.ts` |
-| REQ-INT-002 | none | Systems | `compose.smoke.sh` |
-| REQ-NFR-PERF1 | Slider under 50 ms | Bench + E2E | `engine.bench.ts`, `perf.e2e.ts` |
-| REQ-NFR-PERF2 | none | Lighthouse CI | `lighthouserc.json` |
-| REQ-NFR-CODE1 | none | CI check | `tsc --noEmit`, ESLint `no-explicit-any` |
-| REQ-NFR-CODE2 | Save scenario (Zod payload) | Unit + Integration | `*Schema.test.ts`, API tests |
-| REQ-NFR-SEC1 | none (gap, see §8) | Unit + Integration | `sanitize.test.ts` |
-| REQ-NFR-SEC2 | Rate limiting | Integration | `rateLimit.test.ts` |
+| REQ-FUNC-PL01 | Fixed-rate outline; Revolving LOC | Unit, property, BDD | `unit/engine/payment.test.ts`, `schedule.test.ts`, `interestOnly.test.ts`, `revolving.test.ts` |
+| REQ-FUNC-PL02 | Fixed-rate outline | Unit (Zod), component, BDD | `unit/schemas/loanInput.test.ts`, `component/Calculator.test.tsx` |
+| REQ-FUNC-PL03 | Extra payments | Unit, property, BDD | `unit/engine/extraPayments.test.ts`, `schedule.property.test.ts` |
+| REQ-FUNC-BL01 | MCA; Grace period; Equipment | Unit, property, BDD | `unit/engine/business/*.test.ts` |
+| REQ-FUNC-BL02 | Grace period; MCA | Unit (Zod), BDD | `unit/schemas/loanInput.test.ts`, `unit/engine/business/fees.test.ts` |
+| REQ-FUNC-BL03 | MCA effective APR | Unit, property, BDD | `unit/engine/irr.test.ts`, `business/mca.test.ts`, `business/business.property.test.ts` |
+| REQ-FUNC-AN01 | (all calculator scenarios) | Unit, property, component | `unit/engine/schedule*.test.ts`, `component/AmortizationTable.test.tsx` |
+| REQ-FUNC-AN02 | none | Unit, component, a11y | `unit/lib/chartData.test.ts`, `component/Charts.test.tsx`, `e2e/specs/accessibility.spec.ts` |
+| REQ-FUNC-DB01 | Save to PostgreSQL | Integration, component, BDD | `integration/calculations.api.test.ts`, `component/SaveCalculation.test.tsx` |
+| REQ-FUNC-DB02 | Comparison matrix | Unit, component, BDD | `unit/lib/comparison.test.ts`, `component/SavedCalculations.test.tsx` |
+| REQ-FUNC-DB03 | Export CSV | Unit, component, BDD, E2E | `unit/lib/csv.test.ts`, `unit/lib/pdf.test.ts`, `component/ExportButtons.test.tsx`, `e2e/specs/security.spec.ts` (PDF + CSV under CSP) |
+| REQ-UI-001 | Slider recalculation; extra payments | BDD | `e2e/steps/performance.steps.ts` (no-reload fixture in `fixtures.ts`) |
+| REQ-UI-002 | none | E2E (320 / 768 / 1024 px) | `e2e/specs/responsive.spec.ts` |
+| REQ-UI-003 | Background (mode set) | Component, BDD | `component/ModeToggle.test.tsx`, `component/Calculator.test.tsx` |
+| REQ-INT-001 | none | Unit, integration | `unit/lib/dbConfig.test.ts`, `integration/calculations.api.test.ts` (pool reuse) |
+| REQ-INT-002 | none | Systems | `scripts/compose-smoke.sh` (`npm run test:compose`) |
+| REQ-NFR-PERF1 | Slider under 50 ms | Perf budget, BDD | `perf/engine.budget.test.ts`, `e2e/steps/performance.steps.ts` (p95 from browser timings) |
+| REQ-NFR-PERF2 | none | Lighthouse (desktop preset) | `scripts/lighthouse.mjs` (`npm run test:lighthouse`) |
+| REQ-NFR-CODE1 | none | Static | `tsc --noEmit` (`strict`, `noUncheckedIndexedAccess`), ESLint `no-explicit-any` |
+| REQ-NFR-CODE2 | Save scenario (Zod payload) | Unit, integration | `unit/schemas/*.test.ts`, `integration/calculations.api.test.ts` |
+| REQ-NFR-SEC1 | none | Unit, integration, E2E, lint | `unit/lib/sanitize.test.ts`, `unit/lib/securityHeaders.test.ts`, `integration/calculations.api.test.ts` (XSS, SQLi), `e2e/specs/security.spec.ts`, ESLint `react/no-danger` |
+| REQ-NFR-SEC2 | Rate limiting | Unit, integration, BDD | `unit/lib/rateLimit.test.ts`, `integration/calculations.api.test.ts` |
+
+Requirements with no BDD scenario (AN02, UI-002, INT-001/002, PERF2, CODE1, SEC1) are covered by the tests above; adding scenarios for them is optional and would be a spec change.
 
 ---
 
