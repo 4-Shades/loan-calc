@@ -25,6 +25,11 @@ export const storedSummarySchema = z.object({
   /** Amount borrowed: principal, balance, financed amount or advance. */
   loanAmountCents: cents,
   regularPaymentCents: cents,
+  /**
+   * Regular payment as a monthly equivalent (× payments per year / 12), so daily or
+   * weekly schedules compare with monthly ones. Optional: rows saved before it existed lack it.
+   */
+  monthlyPaymentCents: cents.optional(),
   totalInterestCents: cents,
   totalFeesCents: cents,
   totalPaidCents: cents,

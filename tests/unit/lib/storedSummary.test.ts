@@ -21,6 +21,7 @@ describe("toStoredSummary (summary_results JSONB)", () => {
       category: "PERSONAL",
       loanAmountCents: 1_000_000,
       regularPaymentCents: 43_871,
+      monthlyPaymentCents: 43_871,
       totalInterestCents: 52_915,
       totalFeesCents: 0,
       totalPaidCents: 1_052_915,
@@ -45,6 +46,8 @@ describe("toStoredSummary (summary_results JSONB)", () => {
       totalPaidCents: 6_250_000,
     });
     expect(summary.effectiveAprPercent).toBeCloseTo(92.219, 2);
+    // 21 business-day withdrawals of $496.03 a month, so it compares with monthly loans.
+    expect(summary.monthlyPaymentCents).toBe(49_603 * 21);
   });
 
   it("uses the financed amount for equipment loans", () => {
@@ -59,6 +62,11 @@ describe("toStoredSummary (summary_results JSONB)", () => {
         term: { value: 48, unit: "months" },
       }).loanAmountCents,
     ).toBe(12_000_000);
+  });
+
+  it("converts weekly payments to a monthly equivalent (52 / 12 per month)", () => {
+    const summary = summaryFor({ ...base, loanType: "FIXED_INSTALLMENT", principal: 10_000, term: { value: 24, unit: "months" }, frequency: "weekly" });
+    expect(summary.monthlyPaymentCents).toBe(Math.round((summary.regularPaymentCents * 52) / 12));
   });
 
   it("produces data that the stored-summary schema accepts", () => {

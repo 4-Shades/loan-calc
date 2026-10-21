@@ -14,7 +14,7 @@ type SaveState =
  * (REQ-FUNC-DB01) without leaving the page. Only the title and the validated
  * input are sent; the server recomputes the results it stores.
  */
-export function SaveCalculation({ input }: { input: LoanInput }) {
+export function SaveCalculation({ input, onSaved }: { input: LoanInput; onSaved?: () => void }) {
   const [title, setTitle] = useState("");
   const [state, setState] = useState<SaveState>({ kind: "idle" });
 
@@ -31,6 +31,7 @@ export function SaveCalculation({ input }: { input: LoanInput }) {
       if (response.ok && isSaved(body)) {
         setState({ kind: "saved", id: body.id, title: body.title });
         setTitle("");
+        onSaved?.();
       } else {
         setState({ kind: "error", message: errorMessage(body) ?? `Saving failed (HTTP ${response.status}).` });
       }

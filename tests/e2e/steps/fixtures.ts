@@ -28,7 +28,7 @@ export const test = base.extend<{ spa: SpaTracker; ctx: Record<string, unknown> 
   ],
 });
 
-export const { Given, When, Then } = createBdd(test);
+export const { Given, When, Then, After } = createBdd(test);
 
 /** "$20,000" / "62,500.00" → 20000 / 62500 */
 export function parseMoney(text: string): number {

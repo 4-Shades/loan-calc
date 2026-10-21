@@ -15,10 +15,13 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-01-15T12:00:00"));
   vi.mocked(calculateLoan).mockClear();
+  // The saved-calculations list loads on mount; give it an empty list.
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ items: [], limit: 20, offset: 0 })));
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 const results = () => screen.getByRole("region", { name: "Results" });

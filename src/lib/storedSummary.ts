@@ -1,4 +1,4 @@
-import { toCents } from "@/engine";
+import { MCA_PERIODS_PER_YEAR, PERIODS_PER_YEAR, roundHalfUp, toCents } from "@/engine";
 import { categoryOf, type LoanInput } from "@/schemas/loanInput";
 import type { StoredSummary } from "@/schemas/saveCalculation";
 import type { CalculationResult } from "./calculateLoan";
@@ -10,6 +10,7 @@ export function toStoredSummary(input: LoanInput, result: CalculationResult): St
     category: categoryOf(input.loanType),
     loanAmountCents: loanAmountCents(input, result),
     regularPaymentCents: summary.regularPaymentCents,
+    monthlyPaymentCents: roundHalfUp((summary.regularPaymentCents * paymentsPerYear(input)) / 12),
     totalInterestCents: summary.totalInterestCents,
     totalFeesCents: summary.totalFeesCents,
     totalPaidCents: summary.totalPaidCents,
@@ -28,5 +29,16 @@ function loanAmountCents(input: LoanInput, result: CalculationResult): number {
       return result.loanType === "EQUIPMENT" ? result.schedule.summary.financedCents : 0;
     default:
       return toCents(input.principal);
+  }
+}
+
+function paymentsPerYear(input: LoanInput): number {
+  switch (input.loanType) {
+    case "REVOLVING":
+      return 12;
+    case "MCA":
+      return MCA_PERIODS_PER_YEAR[input.frequency];
+    default:
+      return PERIODS_PER_YEAR[input.frequency];
   }
 }

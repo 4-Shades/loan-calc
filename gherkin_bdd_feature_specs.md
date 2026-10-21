@@ -111,10 +111,10 @@ Feature: PostgreSQL Scenario Storage and Side-by-Side Comparison Matrix
   @REQ-FUNC-DB02
   Scenario: Display side-by-side comparison matrix for up to 3 saved scenarios
     Given the user has 3 saved calculations in PostgreSQL:
-      | Title             | Category | Loan Amount | Effective APR | Monthly Payment |
-      | Bank Term Loan    | Business | $100,000    | 7.20%         | $3,096.64       |
-      | MCA Option        | Business | $100,000    | 42.50%        | $4,166.66       |
-      | Equipment Lease   | Business | $100,000    | 6.10%         | $2,353.67       |
+      | Title             | Category | Loan Amount | Effective APR | Monthly Payment | Total Interest |
+      | Bank Term Loan    | Business | $100,000    | 7.20%         | $3,096.64       | $11,479.04     |
+      | MCA Option        | Business | $100,000    | 42.50%        | $4,166.66       | $24,999.80     |
+      | Equipment Lease   | Business | $100,000    | 6.10%         | $2,353.67       | $12,976.16     |
     When the user selects all 3 scenarios and opens the "Comparison Matrix"
     Then the UI renders a multi-column modal without reloading the page
     And highlights the lowest total interest option in green

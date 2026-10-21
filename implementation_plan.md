@@ -170,6 +170,13 @@ Each slice lists its tests first (Red), then the work (Green), then the exit che
   - `csv.ts`: header exactly `Period,Date,Payment,Principal,Interest,Fees,Remaining Balance`; quote fields; guard against CSV formula injection (prefix `=`, `+`, `-`, `@` cells in text fields); download as `loan-amortization-schedule.csv` via a Blob.
   - `pdf.ts`: summary plus schedule table, built client-side.
 - **Exit:** comparison and CSV scenarios pass; PDF smoke test checks that a non-empty file downloads.
+- **Status:** done. All 13 BDD scenarios pass, none skipped. Changes and choices:
+  - BDD change: the comparison scenario's table gained a **Total Interest** column (TDD §8 item 5). Values follow from each row's payment and a standard term (e.g. $3,096.64 × 36 − $100,000 = $11,479.04).
+  - "Lowest total interest" is judged on **interest + fees** (an MCA's cost is all fees), and "monthly payment" is the regular payment converted to a monthly equivalent (daily MCA × 21, weekly × 52/12). Saved summaries now store `monthlyPaymentCents`; older rows fall back to the per-period payment.
+  - Ties highlight every tied option. Highlights carry text badges ("Lowest cost", "Lowest payment") so they don't rely on color.
+  - Columns follow selection order. The matrix needs 2–3 selections; the 4th checkbox is disabled.
+  - CSV: amounts as plain decimals (no $ or commas), CRLF, period 0 for fee closing rows, formula-injection guard for text cells. PDF: jsPDF + autotable, loaded only when "Export PDF" is clicked.
+  - E2E now leaves the database as it found it: the rate-limit probe sends invalid bodies (still counted, nothing written) and scenarios that insert rows delete them in an `After` hook.
 
 ### Slice 8: Hardening and release
 

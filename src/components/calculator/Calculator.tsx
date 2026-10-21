@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { AmortizationTable } from "@/components/results/AmortizationTable";
+import { ExportButtons } from "@/components/results/ExportButtons";
+import { SavedCalculations } from "@/components/saved/SavedCalculations";
 import { BalanceChart } from "@/components/results/BalanceChart";
 import { BreakdownChart } from "@/components/results/BreakdownChart";
 import { markInput, useRecalcMeasure } from "@/lib/perf";
@@ -10,7 +12,7 @@ import { FormProvider } from "./fields";
 import { DEFAULT_VALUES, evaluateForm, type FormValues } from "./formModel";
 import { LoanFields } from "./LoanFields";
 import { ModeToggle } from "./ModeToggle";
-import { ResultSummary } from "./ResultSummary";
+import { ResultSummary, summaryItems } from "./ResultSummary";
 import { SaveCalculation } from "./SaveCalculation";
 import { useToday } from "./useToday";
 
@@ -25,6 +27,8 @@ export function Calculator() {
     BUSINESS: LOAN_CATEGORIES.BUSINESS[0],
   });
   const [valuesByType, setValuesByType] = useState<Record<LoanType, FormValues>>(DEFAULT_VALUES);
+  // Bumped after each save so the saved-calculations list reloads.
+  const [savedVersion, setSavedVersion] = useState(0);
   const today = useToday();
 
   const loanType = typeByMode[mode];
@@ -83,7 +87,7 @@ export function Calculator() {
           {evaluation.status === "ok" && (
             <>
               <ResultSummary result={evaluation.result} />
-              <SaveCalculation input={evaluation.input} />
+              <SaveCalculation input={evaluation.input} onSaved={() => setSavedVersion((v) => v + 1)} />
             </>
           )}
           {evaluation.status === "invalid" && (
@@ -106,12 +110,20 @@ export function Calculator() {
             <BalanceChart rows={evaluation.result.schedule.rows} />
             <BreakdownChart rows={evaluation.result.schedule.rows} />
           </div>
-          <h2 id="schedule-heading" className="text-xl font-semibold">
-            Amortization schedule
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="schedule-heading" className="text-xl font-semibold">
+              Amortization schedule
+            </h2>
+            <ExportButtons
+              heading={LOAN_TYPE_LABELS[loanType]}
+              summary={summaryItems(evaluation.result)}
+              rows={evaluation.result.schedule.rows}
+            />
+          </div>
           <AmortizationTable rows={evaluation.result.schedule.rows} />
         </section>
       )}
+      <SavedCalculations refreshKey={savedVersion} />
     </div>
   );
 }

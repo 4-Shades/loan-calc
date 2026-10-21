@@ -17,7 +17,8 @@ export function ResultSummary({ result }: { result: CalculationResult }) {
   );
 }
 
-function summaryItems(result: CalculationResult): Item[] {
+/** Label/value pairs shown in the summary; the PDF export reuses them. */
+export function summaryItems(result: CalculationResult): Item[] {
   const { summary, rows } = result.schedule;
   const payments = { label: "Number of payments", value: String(summary.periods) };
   const totalPaid = { label: "Total paid", value: formatCents(summary.totalPaidCents) };

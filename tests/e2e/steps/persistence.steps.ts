@@ -1,8 +1,14 @@
 import { expect, type APIResponse, type Request, type Response } from "@playwright/test";
 import { Client } from "pg";
-import { Given, Then, When, results, waitForResult } from "./fixtures";
+import { After, Given, Then, When, results, waitForResult } from "./fixtures";
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
+
+/** Rows a scenario created are removed afterwards, so E2E runs don't pile up in the database. */
+After(async ({ ctx }) => {
+  const ids = ctx.createdIds as string[] | undefined;
+  if (ids?.length) await query("DELETE FROM saved_calculations WHERE id = ANY($1::uuid[])", [ids]);
+});
 
 async function query<T>(sql: string, params: unknown[]): Promise<T[]> {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
@@ -58,6 +64,7 @@ Then("a JSON record is saved into the {string} PostgreSQL table", async ({ ctx }
   expect(table).toBe("saved_calculations");
   const { id } = await (ctx.response as Response).json();
   ctx.id = id;
+  ctx.createdIds = [id];
   const rows = await query<{ title: string; loan_type: string; inputs: { loanType: string }; summary_results: object }>(
     "SELECT title, loan_type, inputs, summary_results FROM saved_calculations WHERE id = $1",
     [id],
@@ -83,17 +90,9 @@ Given("a client client IP address triggering continuous save requests", async ({
 When(
   "the client sends more than {int} POST requests to {string} within {int} minute",
   async ({ request, ctx }, limit: number, path: string, minutes: number) => {
-    const body = {
-      title: "Rate limit probe",
-      input: {
-        loanType: "FIXED_INSTALLMENT",
-        principal: 1_000,
-        aprPercent: 5,
-        term: { value: 12, unit: "months" },
-        frequency: "monthly",
-        startDate: "2026-01-15",
-      },
-    };
+    // Invalid bodies still count against the limit (it is checked first) but write
+    // nothing, so this scenario leaves no rows behind.
+    const body = {};
     const statuses: number[] = [];
     let last: APIResponse | undefined;
     const started = Date.now();
@@ -112,7 +111,8 @@ When(
 
 Then("the server returns an HTTP {int} Too Many Requests response status", async ({ ctx }, status: number) => {
   const statuses = ctx.statuses as number[];
-  expect(statuses.slice(0, -1).every((s) => s === 201)).toBe(true);
+  // Every request before the limit reached validation (400), none was throttled.
+  expect(statuses.slice(0, -1).every((s) => s === 400)).toBe(true);
   expect(statuses.at(-1)).toBe(status);
   expect((ctx.last as APIResponse).headers()["retry-after"]).toMatch(/^\d+$/);
 });
