@@ -1,4 +1,5 @@
 export { fromCents, roundHalfUp, toCents } from "./money";
+export { LoanCalculationError, type LoanCalculationErrorCode } from "./errors";
 export { addBusinessDays, assertIsoDate, paymentDate } from "./dates";
 export { effectiveAprPercent, periodicIrr } from "./irr";
 export {

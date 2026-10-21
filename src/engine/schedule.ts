@@ -1,4 +1,5 @@
 import { assertIsoDate, paymentDate } from "./dates";
+import { LoanCalculationError } from "./errors";
 import { extraPaymentLookup, type ExtraPaymentImpact, type ExtraPayments } from "./extraPayments";
 import { roundHalfUp } from "./money";
 import { fixedPaymentCents, periodicRate, type FixedPaymentInput } from "./payment";
@@ -57,7 +58,8 @@ export function buildSchedule(input: FixedScheduleInput): Schedule {
   // High-APR, long-term loans (e.g. 50% over 30 years) can have an exact payment less
   // than half a cent above the interest; rounded to the cent it never reduces principal.
   if (regularPaymentCents <= roundHalfUp(principalCents * rate)) {
-    throw new RangeError(
+    throw new LoanCalculationError(
+      "NON_AMORTIZING",
       "Loan does not amortize: the payment does not exceed first-period interest at cent precision",
     );
   }

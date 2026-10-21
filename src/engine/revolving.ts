@@ -1,4 +1,5 @@
 import { assertIsoDate, paymentDate } from "./dates";
+import { LoanCalculationError } from "./errors";
 import { roundHalfUp } from "./money";
 import { periodicRate } from "./payment";
 import { summarizeRows, type Schedule, type ScheduleRow } from "./schedule";
@@ -41,7 +42,10 @@ export function buildRevolvingSchedule(input: RevolvingInput): RevolvingSchedule
 
   const initialMinimumCents = minimumFor(openingBalanceCents);
   if (initialMinimumCents <= roundHalfUp(openingBalanceCents * rate)) {
-    throw new RangeError("Minimum payment does not cover interest: the balance would never decrease");
+    throw new LoanCalculationError(
+      "MINIMUM_BELOW_INTEREST",
+      "Minimum payment does not cover interest: the balance would never decrease",
+    );
   }
 
   const rows: ScheduleRow[] = [];

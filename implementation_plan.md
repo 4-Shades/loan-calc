@@ -115,6 +115,16 @@ Each slice lists its tests first (Red), then the work (Green), then the exit che
 - **Red:** schema tests (TDD §4); `ModeToggle`, `LoanForm` component tests.
 - **Green:** Zod schemas as a discriminated union on `loanType`; `ModeToggle` swaps Personal / Business forms; type-specific fields (grace period only for Interest-Only, factor rate only for MCA); term in months or years; inline errors; sliders for APR and amount (with numeric inputs alongside, for accessibility).
 - **Exit:** invalid input never reaches the engine; the form shows field-level messages.
+- **Status:** done (unit + component tests; production build prerenders `/` as static). Choices made:
+  - Loan type codes follow the SRS `type_code` style: `FIXED_INSTALLMENT`, `INTEREST_ONLY_BALLOON`, `REVOLVING`, `TERM_SBA`, `EQUIPMENT`, `MCA`, `GRACE_PERIOD`.
+  - Ranges the SRS leaves open: business amounts $100–$10,000,000; terms up to 30 years; MCA terms up to 120 months.
+  - Canonical input (`src/schemas/loanInput.ts`) is in dollars and months; `src/lib/calculateLoan.ts` converts to cents/periods and dispatches with an exhaustive `switch`.
+  - Valid-but-impossible inputs (non-amortizing, revolving minimum below interest, fees ≥ loan, MCA too small/too slow) throw `LoanCalculationError` with a code; the dispatcher maps codes to readable messages shown in an alert.
+  - Cross-field rules run only after every field is valid on its own, so each problem gets one message.
+  - The form offers fixed fee slots (Origination, plus SBA guarantee on term loans) and one one-time extra payment; the schema accepts up to 5 fees and 12 one-time extras for API use.
+  - Start date defaults to today via `useSyncExternalStore` (server snapshot null), because reading the clock during prerender fails with Cache Components.
+  - A minimal results summary is included so the form is usable now; the table and charts are Slice 5.
+  - E2E steps not yet written: Playwright browsers are not installed (`npx playwright install chromium`).
 
 ### Slice 5: Results UI and performance (AN01, AN02, UI-001, PERF1)
 

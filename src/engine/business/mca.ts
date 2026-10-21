@@ -1,4 +1,5 @@
 import { addBusinessDays, assertIsoDate, paymentDate } from "../dates";
+import { LoanCalculationError } from "../errors";
 import { roundHalfUp } from "../money";
 import { summarizeRows, type ScheduleRow } from "../schedule";
 import { withUpfrontFees, type BusinessSchedule, type BusinessSummary, type UpfrontFee } from "./fees";
@@ -60,7 +61,7 @@ export function buildMerchantCashAdvance(input: McaInput): BusinessSchedule<McaS
   const { count, paymentCents } = withdrawalPlan(paybackCents, frequency, repayment);
   const finalPaymentCents = paybackCents - paymentCents * (count - 1);
   if (finalPaymentCents <= 0) {
-    throw new RangeError("Advance is too small to split across that many withdrawals");
+    throw new LoanCalculationError("ADVANCE_TOO_SMALL", "Advance is too small to split across that many withdrawals");
   }
 
   const rows: ScheduleRow[] = [];
@@ -116,7 +117,10 @@ function withdrawalPlan(
   const paymentCents = roundHalfUp((revenueCentsPerPeriod * holdbackPercent) / 100);
   const count = paymentCents > 0 ? Math.ceil(paybackCents / paymentCents) : Infinity;
   if (count > MAX_MCA_YEARS * periodsPerYear) {
-    throw new RangeError(`Revenue share would take more than ${MAX_MCA_YEARS} years to repay`);
+    throw new LoanCalculationError(
+      "REPAYMENT_TOO_LONG",
+      `Revenue share would take more than ${MAX_MCA_YEARS} years to repay`,
+    );
   }
   return { count, paymentCents };
 }

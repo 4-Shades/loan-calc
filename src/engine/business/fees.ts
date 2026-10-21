@@ -1,3 +1,4 @@
+import { LoanCalculationError } from "../errors";
 import { effectiveAprPercent } from "../irr";
 import { roundHalfUp } from "../money";
 import type { ScheduleRow, ScheduleSummary } from "../schedule";
@@ -39,7 +40,10 @@ export function resolveAmountCents(amount: Amount, baseCents: number): number {
 export function totalUpfrontFeesCents(fees: readonly UpfrontFee[] | undefined, loanCents: number): number {
   const total = (fees ?? []).reduce((sum, fee) => sum + resolveAmountCents(fee.amount, loanCents), 0);
   if (total >= loanCents) {
-    throw new RangeError(`Upfront fees (${total}¢) must be less than the loan amount (${loanCents}¢)`);
+    throw new LoanCalculationError(
+      "FEES_EXCEED_LOAN",
+      `Upfront fees (${total}¢) must be less than the loan amount (${loanCents}¢)`,
+    );
   }
   return total;
 }
