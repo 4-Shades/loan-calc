@@ -1,3 +1,5 @@
+// DATABASE_URL for the app under test and for steps that check the database.
+import "dotenv/config";
 import { defineConfig, devices } from "@playwright/test";
 import { defineBddConfig } from "playwright-bdd";
 
@@ -10,7 +12,9 @@ const testDir = defineBddConfig({
   missingSteps: "skip-scenario",
 });
 
-const PORT = 3000;
+// Its own port, so a `next dev` server on 3000 is never mistaken for the build under test
+// (dev-mode React is several times slower and would skew the REQ-NFR-PERF1 timings).
+const PORT = Number(process.env.E2E_PORT ?? 3100);
 
 export default defineConfig({
   testDir,
@@ -25,9 +29,10 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     // Run against the production build, as the Next.js testing guide recommends.
-    command: "npm run build && npm run start",
+    command: `npm run build && npm run start -- --port ${PORT}`,
     url: `http://localhost:${PORT}`,
-    reuseExistingServer: !process.env.CI,
+    // Always a fresh production server: never reuse whatever happens to be listening.
+    reuseExistingServer: false,
     timeout: 180_000,
   },
 });

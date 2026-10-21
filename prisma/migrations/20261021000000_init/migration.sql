@@ -1,0 +1,30 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
+-- CreateTable
+CREATE TABLE "loan_products" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "category" VARCHAR(20) NOT NULL,
+    "type_code" VARCHAR(50) NOT NULL,
+    "name" VARCHAR(100) NOT NULL,
+    "created_at" TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "loan_products_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "saved_calculations" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "title" VARCHAR(150) NOT NULL,
+    "loan_type" VARCHAR(50) NOT NULL,
+    "inputs" JSONB NOT NULL,
+    "summary_results" JSONB NOT NULL,
+    "created_at" TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "saved_calculations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "idx_calculations_created" ON "saved_calculations"("created_at" DESC);
+

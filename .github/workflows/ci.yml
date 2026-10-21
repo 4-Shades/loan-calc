@@ -27,8 +27,8 @@ jobs:
       - name: Engine performance budgets (REQ-NFR-PERF1)
         run: npm run test:perf
 
-  e2e:
-    name: BDD acceptance (Playwright)
+  integration:
+    name: API + PostgreSQL (Testcontainers)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +38,34 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run db:generate
+      - run: npm run test:integration
+
+  e2e:
+    name: BDD acceptance (Playwright)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: loancalc
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d loancalc"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:ci_password@localhost:5432/loancalc?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run db:migrate
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v4
@@ -47,4 +75,9 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-  # The integration job (Testcontainers + PostgreSQL) is added in Slice 6.
+  compose:
+    name: Docker Compose systems test (REQ-INT-002)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm run test:compose

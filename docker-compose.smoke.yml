@@ -1,0 +1,14 @@
+# Overrides for scripts/compose-smoke.sh: run the real stack as a separate project
+# with its own container names, ports and volume, so the smoke test never touches
+# a development stack or its data.
+services:
+  postgres:
+    container_name: !reset null
+    ports: !override
+      - "55433:5432"
+  migrate:
+    container_name: !reset null
+  app:
+    container_name: !reset null
+    ports: !override
+      - "3300:3000"

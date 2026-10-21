@@ -24,7 +24,7 @@ export default defineConfig({
           environment: "node",
           // Property tests run thousands of schedules; leave headroom when files run in parallel.
           testTimeout: 20_000,
-          include: ["tests/unit/**/*.test.ts", "tests/integration/**/*.test.ts"],
+          include: ["tests/unit/**/*.test.ts"],
         },
       },
       {
@@ -34,6 +34,18 @@ export default defineConfig({
           environment: "jsdom",
           include: ["tests/component/**/*.test.tsx"],
           setupFiles: ["tests/setup/component.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          // Real PostgreSQL via Testcontainers: needs Docker (npm run test:integration).
+          name: "integration",
+          environment: "node",
+          include: ["tests/integration/**/*.test.ts"],
+          testTimeout: 60_000,
+          hookTimeout: 180_000,
+          fileParallelism: false,
         },
       },
       {

@@ -6,16 +6,23 @@ interface SpaTracker {
   navigations: number;
 }
 
-export const test = base.extend<{ spa: SpaTracker }>({
+export const test = base.extend<{ spa: SpaTracker; ctx: Record<string, unknown> }>({
+  // Fixture callbacks are named `provide` (not Playwright's usual `use`) so React's
+  // hooks lint rule doesn't mistake them for React's use() hook.
+
+  /** Per-scenario scratch space for values one step hands to a later one. */
+  ctx: async ({}, provide) => {
+    await provide({});
+  },
   // Auto: set up before Background hooks run, so the very first load is counted.
   // `load` fires only for full documents, not for in-page history updates.
   spa: [
-    async ({ page }, use) => {
+    async ({ page }, provide) => {
       const spa: SpaTracker = { navigations: 0 };
       page.on("load", () => {
         spa.navigations++;
       });
-      await use(spa);
+      await provide(spa);
     },
     { auto: true },
   ],

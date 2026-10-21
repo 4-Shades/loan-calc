@@ -152,6 +152,14 @@ Each slice lists its tests first (Red), then the work (Green), then the exit che
   - `GET /api/calculations` (newest first, paginated) and `GET /api/calculations/[id]`.
   - `SaveForm`: toast with the UUID on success.
 - **Exit:** `docker compose up --build` works on a clean checkout; the Save scenario and the 429 scenario pass; data survives an app restart.
+- **Status:** done. `npm run test:compose` builds the stack from scratch, saves, restarts the app, reads the row back and confirms uid 1000 (`node`); the Save and 429 BDD scenarios pass; 21 integration tests pass against PostgreSQL 16 in Testcontainers. Changes and choices:
+  - The client sends only `{ title, input }`; the server recomputes and stores the summary (rather than recomputing and comparing), so stored results always follow from stored inputs. Extra keys are rejected.
+  - Prisma 7 needs a driver adapter: `@prisma/adapter-pg` with a pooled `pg` connection; TLS is required for remote databases in production (`DATABASE_SSL` overrides).
+  - Migrations run in a one-shot `migrate` Compose service (the builder stage), so the runner image stays minimal (216 MB). The migrator image is large (1.16 GB); slimming it is a later optimization.
+  - The Compose host port for PostgreSQL defaults to 5432 but is configurable (`POSTGRES_PORT`) because a native PostgreSQL may already own 5432.
+  - Rate limit: per-IP sliding window (60/min) plus a global cap (600/min), since `x-forwarded-for` can be spoofed without a reverse proxy. In memory, so per process.
+  - API also enforces same-origin (403), JSON content type (415) and a 32 KB body limit (413). `GET /api/health` added for container health checks.
+  - E2E runs on its own port (3100) and never reuses an existing server: it had silently reused a `next dev` server on 3000, whose dev-mode React made the slider look 10× slower.
 
 ### Slice 7: Comparison and export (DB02, DB03)
 

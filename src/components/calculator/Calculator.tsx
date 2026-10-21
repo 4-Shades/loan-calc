@@ -11,6 +11,7 @@ import { DEFAULT_VALUES, evaluateForm, type FormValues } from "./formModel";
 import { LoanFields } from "./LoanFields";
 import { ModeToggle } from "./ModeToggle";
 import { ResultSummary } from "./ResultSummary";
+import { SaveCalculation } from "./SaveCalculation";
 import { useToday } from "./useToday";
 
 /**
@@ -79,7 +80,12 @@ export function Calculator() {
 
         <section aria-label="Results" aria-live="polite" className="flex flex-col gap-4">
           <h2 className="text-xl font-semibold">{LOAN_TYPE_LABELS[loanType]}</h2>
-          {evaluation.status === "ok" && <ResultSummary result={evaluation.result} />}
+          {evaluation.status === "ok" && (
+            <>
+              <ResultSummary result={evaluation.result} />
+              <SaveCalculation input={evaluation.input} />
+            </>
+          )}
           {evaluation.status === "invalid" && (
             <p className="text-zinc-600 dark:text-zinc-400">Fix the highlighted fields to see results.</p>
           )}

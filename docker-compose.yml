@@ -1,0 +1,55 @@
+# LoanCalc-SPA (SRS §3.5.1). `docker compose up --build` starts PostgreSQL, applies
+# migrations, then serves the app on http://localhost:3000.
+# POSTGRES_PASSWORD comes from .env (copy .env.example); it is never committed.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: loancalc_db
+    environment:
+      POSTGRES_DB: loancalc
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}
+    ports:
+      # Host port defaults to 5432 (REQ-INT-002); override with POSTGRES_PORT if 5432 is taken.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d loancalc"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrator
+    container_name: loancalc_migrate
+    environment:
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/loancalc?schema=public"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: loancalc_app
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/loancalc?schema=public"
+      NODE_ENV: "production"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:

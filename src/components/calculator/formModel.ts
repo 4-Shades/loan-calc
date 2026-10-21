@@ -1,5 +1,5 @@
 import { calculateLoan, type CalculationResult } from "@/lib/calculateLoan";
-import { loanInputSchema, type LoanType } from "@/schemas/loanInput";
+import { loanInputSchema, type LoanInput, type LoanType } from "@/schemas/loanInput";
 
 /**
  * Raw form state: every field is the string the user typed, keyed by the dotted
@@ -81,7 +81,7 @@ export type Evaluation =
   | { status: "pending" }
   | { status: "invalid"; errors: FieldErrors }
   | { status: "error"; message: string; errors: FieldErrors }
-  | { status: "ok"; result: CalculationResult; errors: FieldErrors };
+  | { status: "ok"; input: LoanInput; result: CalculationResult; errors: FieldErrors };
 
 /**
  * Validates the form and, only if it passes, runs the calculation. Invalid input
@@ -104,7 +104,7 @@ export function evaluateForm(loanType: LoanType, values: FormValues, today: stri
 
   const outcome = calculateLoan(parsed.data);
   return outcome.ok
-    ? { status: "ok", result: outcome.result, errors: {} }
+    ? { status: "ok", input: parsed.data, result: outcome.result, errors: {} }
     : { status: "error", message: outcome.error, errors: {} };
 }
 
