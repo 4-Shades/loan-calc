@@ -7,7 +7,7 @@ const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
 /** Rows a scenario created are removed afterwards, so E2E runs don't pile up in the database. */
 After(async ({ ctx }) => {
   const ids = ctx.createdIds as string[] | undefined;
-  if (ids?.length) await query("DELETE FROM saved_calculations WHERE id = ANY($1::uuid[])", [ids]);
+  if (ids?.length && process.env.DATABASE_URL) await query("DELETE FROM saved_calculations WHERE id = ANY($1::uuid[])", [ids]);
 });
 
 async function query<T>(sql: string, params: unknown[]): Promise<T[]> {

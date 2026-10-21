@@ -1,0 +1,5 @@
+# Ignore local Docker configuration files
+Dockerfile
+docker-compose.yml
+docker-compose-smoke.yml
+.dockerignore

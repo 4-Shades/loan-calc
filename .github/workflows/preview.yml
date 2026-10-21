@@ -1,0 +1,49 @@
+name: Vercel preview checks
+
+# Vercel's GitHub integration reports each deployment as a GitHub deployment status.
+# When a preview deployment succeeds, run the acceptance suite and the Lighthouse
+# budget against its URL (Slice 9 exit criteria).
+on: deployment_status
+
+jobs:
+  preview:
+    name: E2E + Lighthouse on the Vercel preview
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      startsWith(github.event.deployment.environment, 'Preview')
+    runs-on: ubuntu-latest
+    env:
+      E2E_BASE_URL: ${{ github.event.deployment_status.environment_url }}
+      LH_URL: ${{ github.event.deployment_status.environment_url }}
+      # Vercel project → Settings → Deployment Protection → Protection Bypass for Automation.
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      # Optional: the shared preview database (D18). Without it, @db-direct scenarios are skipped.
+      DATABASE_URL: ${{ secrets.PREVIEW_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.deployment.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npx playwright install --with-deps chromium
+      - run: npx bddgen
+      # On Vercel every request from this runner shares one client IP (Vercel overwrites
+      # x-forwarded-for), so the rate-limit scenario runs last, on its own.
+      - name: Acceptance and cross-cutting checks
+        run: npx playwright test --grep-invert @REQ-NFR-SEC2
+      - name: Rate limiting (REQ-NFR-SEC2)
+        run: npx playwright test --grep @REQ-NFR-SEC2
+      - name: First Contentful Paint budget (REQ-NFR-PERF2)
+        run: node scripts/lighthouse.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preview-reports
+          path: |
+            playwright-report/
+            .lighthouse/report.html
+          retention-days: 7

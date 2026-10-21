@@ -99,7 +99,7 @@ Feature: PostgreSQL Scenario Storage and Side-by-Side Comparison Matrix
   I want to save calculated loan configurations and display them in a side-by-side matrix
   So that I can evaluate competing lending offers and make informed financial decisions.
 
-  @REQ-FUNC-DB01 @REQ-NFR-CODE2
+  @REQ-FUNC-DB01 @REQ-NFR-CODE2 @db-direct
   Scenario: Successfully save a loan calculation scenario to PostgreSQL
     Given a fully calculated loan schedule for "SBA 7(a) Expansion Loan"
     And valid payload parameters structured according to the Zod validation schema
@@ -108,7 +108,7 @@ Feature: PostgreSQL Scenario Storage and Side-by-Side Comparison Matrix
     And a JSON record is saved into the "saved_calculations" PostgreSQL table
     And the UI displays a success notification with the assigned UUID
 
-  @REQ-FUNC-DB02
+  @REQ-FUNC-DB02 @db-direct
   Scenario: Display side-by-side comparison matrix for up to 3 saved scenarios
     Given the user has 3 saved calculations in PostgreSQL:
       | Title             | Category | Loan Amount | Effective APR | Monthly Payment | Total Interest |

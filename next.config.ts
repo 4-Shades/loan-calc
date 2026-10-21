@@ -1,9 +1,11 @@
 import type { NextConfig } from "next";
+import { nextOutput } from "./src/lib/deployment";
 import { securityHeaders } from "./src/lib/securityHeaders";
 
 const nextConfig: NextConfig = {
-  // Self-contained server bundle for the Docker runner image (see Dockerfile).
-  output: "standalone",
+  // Self-contained server bundle for the Docker runner image (see Dockerfile);
+  // on Vercel, Vercel's own build output instead (D14).
+  output: nextOutput(process.env),
   cacheComponents: true,
   partialPrefetching: true,
   // Don't advertise the framework in an X-Powered-By header.

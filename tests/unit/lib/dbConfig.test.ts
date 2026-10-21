@@ -8,6 +8,12 @@ describe("databaseSsl (REQ-INT-001: TLS in non-local environments)", () => {
     expect(databaseSsl({ url: remote, nodeEnv: "production" })).toEqual({ rejectUnauthorized: true });
   });
 
+  it.each(["pooled.db.prisma.io", "db.prisma.io"])("requires verified TLS for Prisma Postgres (%s, D15)", (host) => {
+    expect(databaseSsl({ url: `postgres://u:p@${host}:5432/postgres?sslmode=require`, nodeEnv: "production" })).toEqual({
+      rejectUnauthorized: true,
+    });
+  });
+
   it.each(["localhost", "127.0.0.1", "[::1]", "postgres"])("skips TLS for local host %s", (host) => {
     expect(databaseSsl({ url: `postgresql://app:secret@${host}:5432/loancalc`, nodeEnv: "production" })).toBe(false);
   });

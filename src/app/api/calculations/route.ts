@@ -3,16 +3,20 @@ import type { Prisma } from "@/generated/prisma/client";
 import { calculateLoan } from "@/lib/calculateLoan";
 import { getPrisma } from "@/lib/db";
 import { isJson, isSameOrigin, jsonError, readLimitedText, validationError } from "@/lib/http";
-import { clientIp, createRateLimiter } from "@/lib/rateLimit";
+import { clientIp } from "@/lib/rateLimit";
+import { createRateLimiter, rateLimitStoreFromEnv } from "@/lib/rateLimitConfig";
 import { toStoredSummary } from "@/lib/storedSummary";
 import { saveCalculationRequestSchema, storedSummarySchema } from "@/schemas/saveCalculation";
 
 const MAX_BODY_BYTES = 32 * 1024;
 const WINDOW_MS = 60_000;
 // REQ-NFR-SEC2: 60 saves per minute per client IP, plus a global ceiling that
-// still holds if clients rotate a spoofed x-forwarded-for (see clientIp).
-const perClient = createRateLimiter({ limit: 60, windowMs: WINDOW_MS });
-const overall = createRateLimiter({ limit: 600, windowMs: WINDOW_MS });
+// still holds if clients rotate a spoofed x-forwarded-for (see clientIp). Counts
+// live in memory on Docker and in Upstash Redis on Vercel (D16), chosen by env.
+const store = rateLimitStoreFromEnv(process.env);
+const perClient = createRateLimiter(store, { name: "client", limit: 60, windowMs: WINDOW_MS });
+const overall = createRateLimiter(store, { name: "global", limit: 600, windowMs: WINDOW_MS });
+const onVercel = Boolean(process.env.VERCEL);
 
 /** Save a calculation (REQ-FUNC-DB01). Results are recomputed here, never taken from the client. */
 export async function POST(request: Request): Promise<Response> {
@@ -20,8 +24,8 @@ export async function POST(request: Request): Promise<Response> {
 
   // Check the client's own limit first, so a client that is already blocked
   // doesn't also use up the global allowance everyone shares.
-  let limit = perClient.check(clientIp(request.headers));
-  if (limit.allowed) limit = overall.check("*");
+  let limit = await perClient.check(clientIp(request.headers, { onVercel }));
+  if (limit.allowed) limit = await overall.check("*");
   if (!limit.allowed) {
     return jsonError(429, `Rate limit exceeded. Try again in ${limit.retryAfterSeconds} seconds.`, {
       headers: { "Retry-After": String(limit.retryAfterSeconds) },

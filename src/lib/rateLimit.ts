@@ -5,19 +5,24 @@ export interface RateLimitResult {
   retryAfterSeconds: number;
 }
 
-interface RateLimiterOptions {
+/** A sliding-window limiter (REQ-NFR-SEC2). Stores: memory (Docker) or Redis (Vercel, D16). */
+export interface RateLimiter {
+  check(key: string): Promise<RateLimitResult>;
+}
+
+export interface RateLimiterOptions {
   limit: number;
   windowMs: number;
   now?: () => number;
 }
 
 /**
- * In-memory sliding-window rate limiter (REQ-NFR-SEC2). State lives in this
- * process only: right for the single-container deployment, but replicas would
- * each keep their own count (use a shared store such as Redis to scale out).
- * Rejected requests are not recorded, so a blocked client recovers on schedule.
+ * In-memory sliding-window limiter. State lives in this process only: right for
+ * the single Docker container, wrong for serverless functions, where each instance
+ * would count separately (use the Redis store there). Rejected requests are not
+ * recorded, so a blocked client recovers on schedule.
  */
-export function createRateLimiter({ limit, windowMs, now = Date.now }: RateLimiterOptions) {
+export function createMemoryRateLimiter({ limit, windowMs, now = Date.now }: RateLimiterOptions) {
   const hits = new Map<string, number[]>();
   let lastSweep = now();
 
@@ -31,14 +36,13 @@ export function createRateLimiter({ limit, windowMs, now = Date.now }: RateLimit
   }
 
   return {
-    check(key: string): RateLimitResult {
+    async check(key: string): Promise<RateLimitResult> {
       const time = now();
       sweep(time);
       const recent = (hits.get(key) ?? []).filter((t) => t > time - windowMs);
       if (recent.length >= limit) {
         hits.set(key, recent);
-        const retryAfterSeconds = Math.max(1, Math.ceil((recent[0]! + windowMs - time) / 1000));
-        return { allowed: false, remaining: 0, retryAfterSeconds };
+        return { allowed: false, remaining: 0, retryAfterSeconds: retryAfter(recent[0]!, windowMs, time) };
       }
       recent.push(time);
       hits.set(key, recent);
@@ -49,13 +53,23 @@ export function createRateLimiter({ limit, windowMs, now = Date.now }: RateLimit
   };
 }
 
+/** Whole seconds until the oldest request in the window expires (at least 1). */
+export function retryAfter(oldestMs: number, windowMs: number, nowMs: number): number {
+  return Math.max(1, Math.ceil((oldestMs + windowMs - nowMs) / 1000));
+}
+
 /**
- * Best-effort client IP. Next.js fills x-forwarded-for from the socket only when
- * the client didn't send one, so without a reverse proxy that overwrites it,
- * clients can choose their own key. Deploy behind such a proxy in production;
- * the API also applies a global cap that spoofed IPs cannot escape.
+ * Best-effort client IP.
+ *
+ * - On Vercel, the edge overwrites x-forwarded-for, x-real-ip and
+ *   x-vercel-forwarded-for with the real client address, so they can be trusted;
+ *   x-vercel-forwarded-for is preferred because another proxy in front could
+ *   rewrite x-forwarded-for.
+ * - Elsewhere, Next.js fills x-forwarded-for from the socket only when the client
+ *   didn't send one, so without a reverse proxy that overwrites it, clients choose
+ *   their own key. The API's global cap still holds in that case.
  */
-export function clientIp(headers: Headers): string {
-  const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || headers.get("x-real-ip")?.trim() || "unknown";
+export function clientIp(headers: Headers, { onVercel = false }: { onVercel?: boolean } = {}): string {
+  const first = (name: string) => headers.get(name)?.split(",")[0]?.trim();
+  return (onVercel && first("x-vercel-forwarded-for")) || first("x-forwarded-for") || headers.get("x-real-ip")?.trim() || "unknown";
 }

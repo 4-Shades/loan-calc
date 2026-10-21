@@ -15,7 +15,7 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx prisma generate && npm run build
+RUN npm run build
 
 # Migrator: applies prisma/migrations, then exits. docker-compose runs it before the app.
 FROM builder AS migrator

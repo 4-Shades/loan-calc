@@ -42,7 +42,7 @@ test("the app runs under its CSP without violations, including PDF and CSV expor
   expect(violations).toEqual([]);
 });
 
-test("markup stored in the database is shown as text, never executed (XSS)", async ({ page }) => {
+test("markup stored in the database is shown as text, never executed (XSS)", { tag: "@db-direct" }, async ({ page }) => {
   // Bypass API sanitization on purpose: React's escaping must hold even for bad data.
   const payload = `<img src=x onerror="window.__xss=1">Offer`;
   const db = new Client({ connectionString: process.env.DATABASE_URL });

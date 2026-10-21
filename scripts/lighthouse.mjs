@@ -2,6 +2,8 @@
 // Runs Lighthouse (desktop preset: 40 ms RTT, 10 Mbps, no CPU slowdown) against the
 // production build several times and fails if the median FCP misses the budget.
 // Needs `npm run build` first and a Chromium browser; set CHROME_PATH to use e.g. Edge.
+// Remote mode: LH_URL audits a deployed URL (e.g. a Vercel preview) instead of a local
+// server; VERCEL_AUTOMATION_BYPASS_SECRET is sent if Deployment Protection is on.
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import * as chromeLauncher from "chrome-launcher";
@@ -9,18 +11,20 @@ import lighthouse from "lighthouse";
 import desktopConfig from "lighthouse/core/config/desktop-config.js";
 
 const PORT = Number(process.env.LH_PORT ?? 3200);
-const URL = `http://localhost:${PORT}/`;
+const URL = process.env.LH_URL ?? `http://localhost:${PORT}/`;
 const BUDGET_MS = 1200;
 const RUNS = Number(process.env.LH_RUNS ?? 3);
 
-const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "--port", String(PORT)], {
-  stdio: "ignore",
-});
+const server = process.env.LH_URL
+  ? undefined
+  : spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "--port", String(PORT)], { stdio: "ignore" });
+const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+const extraHeaders = bypass ? { "x-vercel-protection-bypass": bypass, "x-vercel-set-bypass-cookie": "true" } : undefined;
 
 async function waitForServer() {
   for (let i = 0; i < 60; i++) {
     try {
-      if ((await fetch(URL)).ok) return;
+      if ((await fetch(URL, { headers: extraHeaders })).ok) return;
     } catch {
       // not up yet
     }
@@ -40,7 +44,7 @@ try {
   const results = [];
   let lastReport = "";
   for (let run = 1; run <= RUNS; run++) {
-    const result = await lighthouse(URL, { port: chrome.port, output: "html", onlyCategories: ["performance"] }, desktopConfig);
+    const result = await lighthouse(URL, { port: chrome.port, output: "html", onlyCategories: ["performance"], extraHeaders }, desktopConfig);
     const audits = result.lhr.audits;
     results.push({
       run,
@@ -65,5 +69,5 @@ try {
   process.exitCode = pass ? 0 : 1;
 } finally {
   await chrome?.kill();
-  server.kill();
+  server?.kill();
 }

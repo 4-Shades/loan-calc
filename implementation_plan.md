@@ -25,11 +25,11 @@ These are defaults I would use. Items marked **Open** come from TDD §8 and need
 | D11 | Revolving minimum | % of current balance each period, no floor | Decided |
 | D12 | Fees on term/SBA loans | Deducted from proceeds: payments on the full amount, fees in a period-0 closing row, Effective APR on net proceeds. Applies to all business loan types | Decided |
 | D13 | Auth | None. The SRS defines no users; saved calculations are global | Per SRS |
-| D14 | Hosting | Vercel for production and per-PR preview deployments. Docker Compose stays for self-hosting and REQ-INT-002 | Proposed |
-| D15 | Database on Vercel | Managed PostgreSQL from the Vercel Marketplace (e.g. Neon): pooled connection string for the app, direct one for migrations | **Open** |
-| D16 | Rate limiting on Vercel | Shared store (e.g. Upstash Redis from the Marketplace) behind a `RateLimiter` interface; in-memory stays for Docker and tests. Optionally a Vercel Firewall rate-limit rule as an outer layer | **Open** |
-| D17 | Migrations on Vercel | `prisma migrate deploy` from CI before promoting to production, never inside the Vercel build (so a preview build can't migrate production) | Proposed |
-| D18 | Preview databases | A database branch per preview deployment, or one shared staging database | **Open** |
+| D14 | Hosting | Vercel for production and per-PR preview deployments. Docker Compose stays for self-hosting and REQ-INT-002 | Decided |
+| D15 | Database on Vercel | **Prisma Postgres** (Vercel Marketplace) through the existing `pg` adapter: pooled host `pooled.db.prisma.io` for the app (`DATABASE_URL`), direct host `db.prisma.io` for migrations (`DIRECT_URL`), TLS required | Decided |
+| D16 | Rate limiting on Vercel | **Upstash Redis** (Vercel Marketplace) behind a `RateLimiter` interface: an atomic Lua sliding window, same semantics as the in-memory store (which stays for Docker and tests). Fails open if Redis is down | Decided |
+| D17 | Migrations on Vercel | **Changed in Slice 9:** `prisma migrate deploy` inside `vercel-build` (Prisma's documented approach), against that environment's own `DIRECT_URL`. Safe because previews have their own database (D18); the build refuses to run without an explicit `DIRECT_URL`. Avoids fighting Vercel's automatic promotion | Decided |
+| D18 | Preview databases | **One shared preview database** (a second Prisma Postgres database scoped to Vercel's Preview environment). Prisma Postgres has no automatic per-preview branching; previews share data and schema | Decided |
 
 ---
 
@@ -254,7 +254,14 @@ SRS §3.5 requires deployment with Docker Compose, so Vercel is an *additional* 
   - Production serves `/api/health` with `200` against the managed database.
   - The rate limit holds across function instances: the contract tests pass against Redis, and the 429 scenario passes on the preview.
   - The Docker Compose smoke test still passes.
-- **Status:** not started. Needs D15, D16 and D18 decided, plus a Vercel project with access to the GitHub repository.
+- **Status:** code and tests done; deployment not yet performed (needs your Vercel project, see the README checklist). What changed against the plan above:
+  - D17 switched to migrating inside `vercel-build` (see the decisions table); there is no separate CI migration job.
+  - The rate-limit contract (5 behavioral cases) runs against the memory store in unit tests and against real Redis 7 behind an Upstash-compatible REST proxy (SRH) in integration tests. The SRH image is community-maintained and was last updated in 2024; it is used only in tests.
+  - On Vercel, `clientIp` trusts `x-vercel-forwarded-for`: Vercel documents that it overwrites the forwarding headers, so the spoofing caveat for Docker doesn't apply there.
+  - `db.ts` now builds a `pg` `Pool` (5 connections, 5 s idle timeout on Vercel; 10 / 10 s on Docker) and calls `attachDatabasePool` on Vercel.
+  - The `build` script runs `prisma generate` itself, so Vercel and Docker both get the generated client.
+  - Remote E2E: `E2E_BASE_URL` targets a deployment (no local server). `@db-direct` scenarios (save, comparison, XSS) run only when that deployment's `DATABASE_URL` is supplied. `.github/workflows/preview.yml` runs on each successful preview deployment.
+  - A local build with `VERCEL=1` succeeds and produces no standalone output.
 
 ---
 
@@ -270,7 +277,8 @@ SRS §3.5 requires deployment with Docker Compose, so Vercel is an *additional* 
 | SRS §3.5 requires Docker Compose; Vercel is a different runtime | Keep both targets from the same code; the Compose smoke test stays in CI so the SRS path never regresses |
 | On Vercel each serverless instance would count requests separately, so 60/min per IP wouldn't hold | Shared rate-limit store behind one interface (D16); contract tests run against both stores |
 | Serverless instances exhausting PostgreSQL connections | Pooled connection string, small per-instance pool, idle clients released on suspend |
-| Preview deployments migrating or polluting production data | Migrations only from CI with `DIRECT_URL` (D17); preview env vars point at a preview or staging database (D18) |
+| Preview deployments migrating or polluting production data | Each environment migrates only its own `DIRECT_URL` (D17); Preview env vars point at the shared preview database (D18). A preview that inherited production variables would touch production, so set Preview-scoped values first |
+| Shared preview database: one PR's migration affects every preview | Accepted with D18; write migrations expand-then-contract |
 | Cold starts on API routes | Calculations run in the browser, so PERF1 is unaffected; only save/list latency changes. Co-locate the function region with the database |
 | E2E steps that write SQL directly can't reach a remote database | Tag them `@db-direct` and skip them for remote runs, or provide a preview database secret |
 | E2E flakiness on timing assertions | Measure with `performance.measure` in-page, use p95 over many samples, fixed CI profile |
