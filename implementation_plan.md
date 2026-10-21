@@ -83,9 +83,13 @@ Each slice lists its tests first (Red), then the work (Green), then the exit che
 ### Slice 2: Extra payments and revolving credit (PL03, PL01 #3)
 
 - **Red:** `extraPayments.test.ts`, `revolving.test.ts`.
-- **Green:** `buildSchedule` accepts `extra: { recurring?, oneTime?: {period, amount}[] }`. Summary adds `termReduction` and `interestSaved`, computed against the same inputs with extras removed. `revolving.ts` per D11, with a hard cap on periods.
+- **Green:** `buildSchedule` accepts `extraPayments: { recurringCents?, oneTime?: {period, amountCents}[] }`. Summary adds `extraPaymentImpact: { periodsSaved, interestSavedCents }`, computed against the same inputs with extras removed. `revolving.ts` per D11, with a hard cap on periods.
 - Also add the **Interest-Only with Balloon** personal type (PL01 #2), which has no BDD scenario.
 - **Exit:** the $20k/6%/48 scenario shows a 9-month reduction and about $498 saved.
+- **Status:** done at unit level ($498.21 saved; $8,000 revolving line takes 943 months, $11,999.08 interest). Choices made:
+  - Recurring extras are added once per payment period (identical to "monthly" for monthly loans; per week for weekly loans). Impact is reported in periods, not months.
+  - Extra payments apply to fixed-rate installment loans only, not to interest-only or revolving.
+  - Revolving: the minimum is a percentage of the balance before that month's interest (matches the BDD). Once the rounded minimum would reduce the balance by less than a cent (balances around $1), the remainder is paid off so the schedule ends. Default cap: 1,200 months, with `paidOff: false` if reached.
 
 ### Slice 3: Business engines (BL01–BL03)
 

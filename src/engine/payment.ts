@@ -33,7 +33,7 @@ export function periodsForTerm(termMonths: number, frequency: PaymentFrequency):
   return periods;
 }
 
-function assertValidLoan({ principalCents, aprPercent, periods }: FixedPaymentInput): void {
+export function assertValidLoan({ principalCents, aprPercent, periods }: FixedPaymentInput): void {
   if (!Number.isInteger(principalCents) || principalCents <= 0) {
     throw new RangeError(`Principal must be a positive whole number of cents, got ${principalCents}`);
   }

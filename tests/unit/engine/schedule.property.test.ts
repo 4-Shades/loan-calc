@@ -106,6 +106,44 @@ describe("buildSchedule properties (REQ-FUNC-AN01)", () => {
     );
   });
 
+  describe("with extra payments (REQ-FUNC-PL03)", () => {
+    const withExtrasArb = loanArb.chain((input) =>
+      fc.record({
+        input: fc.constant(input),
+        recurringCents: fc.integer({ min: 0, max: Math.ceil(input.principalCents / 10) }),
+        oneTime: fc.array(
+          fc.record({
+            period: fc.integer({ min: 1, max: input.periods }),
+            amountCents: fc.integer({ min: 1, max: input.principalCents }),
+          }),
+          { maxLength: 3 },
+        ),
+      }),
+    );
+
+    it("repays exactly the principal, never later and never with more interest than without extras", () => {
+      fc.assert(
+        fc.property(withExtrasArb, ({ input, recurringCents, oneTime }) => {
+          const baseline = tryBuild(input);
+          if (!baseline) return;
+          const accelerated = buildSchedule({ ...input, extraPayments: { recurringCents, oneTime } });
+          const { rows, summary } = accelerated;
+
+          expect(sum(rows.map((r) => r.principalCents))).toBe(input.principalCents);
+          expect(rows.at(-1)?.balanceCents).toBe(0);
+          expect(rows.every((r) => r.principalCents > 0 && r.balanceCents >= 0)).toBe(true);
+          expect(summary.extraPaymentImpact).toEqual({
+            periodsSaved: baseline.rows.length - rows.length,
+            interestSavedCents: baseline.summary.totalInterestCents - summary.totalInterestCents,
+          });
+          expect(summary.extraPaymentImpact?.periodsSaved).toBeGreaterThanOrEqual(0);
+          expect(summary.extraPaymentImpact?.interestSavedCents).toBeGreaterThanOrEqual(0);
+        }),
+        { numRuns: 1000 },
+      );
+    });
+  });
+
   it("can charge less interest at a higher APR when payment rounding flips direction", () => {
     // Found by fast-check. At 52.34% the exact payment $2.0944 rounds down to $2.09
     // (small underpayment, larger final payment); at 53.34% $2.1292 rounds up to
