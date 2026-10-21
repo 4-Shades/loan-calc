@@ -88,7 +88,7 @@ export function buildSchedule(input: FixedScheduleInput): Schedule {
 
   const summary = summarizeRows(rows, regularPaymentCents);
   if (extraPayments) {
-    const baseline = buildSchedule({ principalCents, aprPercent, periods, frequency, startDate });
+    const baseline = buildSchedule({ ...input, extraPayments: undefined });
     summary.extraPaymentImpact = {
       periodsSaved: baseline.summary.periods - summary.periods,
       interestSavedCents: baseline.summary.totalInterestCents - summary.totalInterestCents,

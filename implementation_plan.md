@@ -20,10 +20,10 @@ These are defaults I would use. Items marked **Open** come from TDD §8 and need
 | D6 | Rate limiter | In-memory sliding window keyed by IP (single container) | Proposed |
 | D7 | Engine location | Pure TS in `src/engine/`, imported by client and server | Per TDD |
 | D8 | Total-interest values in BDD | Corrected to the cent-rounded schedule totals (529.15 / 5774.86 / 330.93); asserted exactly | Decided |
-| D9 | Equipment residual | Level payments leaving the residual at term end ($2,571.32 for the BDD case) | **Open** |
-| D10 | MCA Effective APR convention | Daily IRR on business days (252/yr), compounded | **Open** |
+| D9 | Equipment residual | Balloon loan: level payments leaving the residual at term end, repaid with the final payment ($2,571.32 for the BDD case) | Decided |
+| D10 | MCA Effective APR convention | Nominal (Reg Z style): periodic IRR × periods per year; daily = business days, 252/yr, 21/month (92.22% for the BDD case) | Decided |
 | D11 | Revolving minimum | % of current balance each period, no floor | Decided |
-| D12 | Fees on term/SBA loans | Added to the Fees column and Effective APR; paid upfront, not financed | **Open** |
+| D12 | Fees on term/SBA loans | Deducted from proceeds: payments on the full amount, fees in a period-0 closing row, Effective APR on net proceeds. Applies to all business loan types | Decided |
 | D13 | Auth | None. The SRS defines no users; saved calculations are global | Per SRS |
 
 ---
@@ -97,11 +97,18 @@ Each slice lists its tests first (Red), then the work (Green), then the exit che
 - **Green, in this order:**
   1. `graceInterestOnly.ts`: periods 1–6 pay $625.00, then amortize 30 periods.
   2. `equipment.ts`: financed = price − down payment; balloon per D9.
-  3. `irr.ts`: bisection plus Newton fallback, an iteration cap, and a clear error on non-convergence.
+  3. `irr.ts`: bisection (always converges for conventional cash flows, so no Newton step needed), an iteration cap, and a clear error on non-convergence.
   4. `mca.ts`: payback = advance × factor; daily or weekly withholding; Effective APR via IRR per D10.
   5. `term.ts`: origination and SBA guarantee fees (flat or %), fees in the Fees column and in Effective APR.
 - `engine/index.ts` dispatches on `loanType` with an exhaustive `switch` (compile error if a type is unhandled).
 - **Exit:** all Business scenarios pass at unit level; MCA payback is $62,500.00 and Effective APR is above 45%.
+- **Status:** done at unit level (MCA APR 92.22%; grace $625.00 × 6 then $3,665.97; equipment final payment $17,571.37). Changes and choices:
+  - The `loanType` dispatcher moves to Slice 4, so it is built together with the Zod discriminated union that defines its inputs.
+  - Business-day dates skip weekends only; public holidays are not modeled.
+  - MCA withdrawals are split pro rata into principal and finance charge; the charge is shown in the Fees column (interest is 0). Balance is remaining advance, not remaining payback.
+  - Revenue-share MCAs (BL02) are supported: withdrawal = holdback % × revenue per period, term derived. MCA terms are capped at 10 years.
+  - SBA guarantee fees are entered as flat or % of the loan amount (real SBA fees are % of the guaranteed portion; enter the dollar amount for that).
+  - Timing: 30-year monthly term loan with fees 1.4 ms; worst case (10-year daily MCA, 2,520 rows) 11 ms. Within the 50 ms budget; revisit in Slice 5.
 
 ### Slice 4: Validation and input UI (CODE2, UI-003, PL02, BL02)
 

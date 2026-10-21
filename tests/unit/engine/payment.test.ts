@@ -48,6 +48,34 @@ describe("fixedPaymentCents (REQ-FUNC-PL01, PL02)", () => {
     ).toBe(134996);
   });
 
+  it("leaves a balloon balance to be repaid with the final payment (decision D9)", () => {
+    // $120,000 at 6.5% over 48 months, $15,000 remaining at the end.
+    expect(
+      fixedPaymentCents({
+        principalCents: 12_000_000,
+        aprPercent: 6.5,
+        periods: 48,
+        frequency: "monthly",
+        balloonCents: 1_500_000,
+      }),
+    ).toBe(257_132);
+    expect(
+      fixedPaymentCents({
+        principalCents: 12_000_000,
+        aprPercent: 0,
+        periods: 48,
+        frequency: "monthly",
+        balloonCents: 1_500_000,
+      }),
+    ).toBe(218_750);
+  });
+
+  it.each([-1, 0.5, 12_000_000])("rejects a balloon of %d cents", (balloonCents) => {
+    expect(() =>
+      fixedPaymentCents({ principalCents: 12_000_000, aprPercent: 6.5, periods: 48, frequency: "monthly", balloonCents }),
+    ).toThrow(RangeError);
+  });
+
   it("divides principal evenly when the rate is exactly zero", () => {
     expect(
       fixedPaymentCents({ principalCents: 1_000_000, aprPercent: 0, periods: 24, frequency: "monthly" }),

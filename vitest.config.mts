@@ -22,6 +22,8 @@ export default defineConfig({
         test: {
           name: "unit",
           environment: "node",
+          // Property tests run thousands of schedules; leave headroom when files run in parallel.
+          testTimeout: 20_000,
           include: ["tests/unit/**/*.test.ts", "tests/integration/**/*.test.ts"],
         },
       },

@@ -30,6 +30,33 @@ function formatIsoDate(date: Date): string {
 }
 
 /**
+ * The date `days` business days (Mon–Fri) after `startDate`. Public holidays are
+ * not modeled. A weekend start counts from the preceding Friday.
+ */
+export function addBusinessDays(startDate: string, days: number): string {
+  if (!Number.isInteger(days) || days < 0) {
+    throw new RangeError(`Business days must be a non-negative whole number, got ${days}`);
+  }
+  const { year, monthIndex, day } = parseIsoDate(startDate);
+  if (days === 0) return startDate;
+
+  const date = new Date(Date.UTC(year, monthIndex, day));
+  const weekday = date.getUTCDay(); // 0 = Sunday, 6 = Saturday
+  if (weekday === 0 || weekday === 6) {
+    date.setUTCDate(date.getUTCDate() - (weekday === 0 ? 2 : 1));
+  }
+
+  // Whole weeks land on the same weekday; then step through the remainder.
+  date.setUTCDate(date.getUTCDate() + Math.floor(days / 5) * 7);
+  for (let remaining = days % 5; remaining > 0; ) {
+    date.setUTCDate(date.getUTCDate() + 1);
+    const current = date.getUTCDay();
+    if (current !== 0 && current !== 6) remaining--;
+  }
+  return formatIsoDate(date);
+}
+
+/**
  * Due date of payment number `period` for a loan originated on `startDate`.
  * Monthly and annual schedules keep the origination day, clamped to the end of
  * shorter months (Jan 31 → Feb 28 → Mar 31). Pure: no dependence on "today".

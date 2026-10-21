@@ -1,5 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { paymentDate } from "@/engine/dates";
+import { addBusinessDays, paymentDate } from "@/engine/dates";
+
+describe("addBusinessDays (MCA daily withdrawals)", () => {
+  // 2026-01-15 is a Thursday. Weekends are skipped; public holidays are not modeled.
+  it.each([
+    ["2026-01-15", 0, "2026-01-15"],
+    ["2026-01-15", 1, "2026-01-16"],
+    ["2026-01-15", 2, "2026-01-19"],
+    ["2026-01-15", 5, "2026-01-22"],
+    ["2026-01-16", 1, "2026-01-19"],
+    ["2026-01-17", 1, "2026-01-19"],
+    ["2026-01-17", 5, "2026-01-23"],
+    ["2026-01-18", 1, "2026-01-19"],
+    ["2026-01-15", 126, "2026-07-10"],
+  ])("%s + %i business days → %s", (start, days, expected) => {
+    expect(addBusinessDays(start, days)).toBe(expected);
+  });
+
+  it("rejects negative or fractional day counts and invalid dates", () => {
+    expect(() => addBusinessDays("2026-01-15", -1)).toThrow(RangeError);
+    expect(() => addBusinessDays("2026-01-15", 1.5)).toThrow(RangeError);
+    expect(() => addBusinessDays("2026-02-30", 1)).toThrow(RangeError);
+  });
+});
 
 describe("paymentDate", () => {
   it("advances weekly and bi-weekly by 7 and 14 days", () => {

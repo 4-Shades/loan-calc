@@ -229,7 +229,7 @@ it('MCA $50k, factor 1.25, 6 months daily', () => {
 
 - Flat fee vs % of principal: the same dollar result gives the same schedule.
 - Fees appear in the `Fees` column and in the Effective APR.
-- Fees financed vs paid upfront (needs a spec decision, see §8).
+- Fees are deducted from proceeds (D12): payments on the full amount, fees in a period-0 closing row, Effective APR on net proceeds.
 
 ### 3.10 Rounding policy
 
@@ -369,8 +369,8 @@ These need a decision before the matching tests can be finalized. Items 1–3 ar
    - Level payments sized so $15,000 remains at the end: **$2,571.32**
    - Fully amortizing payment plus a $15,000 extra at the end: **$2,845.79**
 
-   Pick one before writing the exact-value test.
-4. **MCA Effective APR.** The BDD only says "exceeding 45%". The result depends on convention: 6 months of daily withholding gives roughly 92% (simple annualized IRR) up to about 150% (compounded, business-day basis). The threshold is safe, but the SRS verification row ("matches standard IRR calculation") needs a stated convention (days/year, business days or calendar days, simple vs compounded) before an exact test is possible.
+   **Resolved (D9):** balloon loan, $2,571.32 × 47 then $17,571.37 (the $15,000 residual plus 5¢ of rounding).
+4. **MCA Effective APR.** The BDD only says "exceeding 45%". The result depends on convention: 6 months of daily withholding gives roughly 92% (simple annualized IRR) up to about 150% (compounded, business-day basis). The threshold is safe, but the SRS verification row ("matches standard IRR calculation") needs a stated convention (days/year, business days or calendar days, simple vs compounded) before an exact test is possible. **Resolved (D10):** nominal APR = periodic IRR × periods per year, daily = 252 business days; the BDD case is 92.22%.
 5. **Comparison matrix fixtures.** The monthly payments in the BDD table are inputs, not outputs of the engine ($3,096.64 vs a computed ≈ $3,096.86 for $100k at 7.2% over 36 months; the terms are not given). Treat them as static fixtures for UI highlight tests only. Tie-break rule for equal values (highlight both?) is undefined. The table shows no "total interest" column, but the scenario asserts "lowest total interest highlighted in green", so the fixtures need that value.
 6. **Coverage gaps (requirements with no BDD scenario):** REQ-FUNC-AN02 (charts), REQ-UI-002 (responsive), REQ-UI-003 (mode toggle is only a Background step), REQ-NFR-SEC1 (XSS / SQLi), REQ-NFR-PERF2 (FCP), REQ-INT-001/002, REQ-FUNC-DB03 PDF export (BDD covers CSV only), Interest-Only with Balloon personal loan (PL01 item 2), SBA fees (BL01 item 1), and non-monthly frequencies. This plan adds tests for them above, but the Gherkin should be extended so behavior stays specified in one place.
 7. **Minor:** scenario says "Given a client client IP address" (duplicated word); 429 body's JSON shape is not defined (this plan assumes `{ "error": "..." }`); "up to 3" comparison allows 2, and selecting 1 or 0 is unspecified.

@@ -14,6 +14,8 @@ export interface FixedPaymentInput {
   aprPercent: number;
   periods: number;
   frequency: PaymentFrequency;
+  /** Balance left to repay as a balloon with the final payment (e.g. equipment residual). */
+  balloonCents?: number;
 }
 
 /** Nominal rate per payment period, e.g. 6% APR paid monthly → 0.005. */
@@ -33,7 +35,7 @@ export function periodsForTerm(termMonths: number, frequency: PaymentFrequency):
   return periods;
 }
 
-export function assertValidLoan({ principalCents, aprPercent, periods }: FixedPaymentInput): void {
+export function assertValidLoan({ principalCents, aprPercent, periods, balloonCents = 0 }: FixedPaymentInput): void {
   if (!Number.isInteger(principalCents) || principalCents <= 0) {
     throw new RangeError(`Principal must be a positive whole number of cents, got ${principalCents}`);
   }
@@ -43,15 +45,22 @@ export function assertValidLoan({ principalCents, aprPercent, periods }: FixedPa
   if (!Number.isInteger(periods) || periods < 1) {
     throw new RangeError(`Periods must be a positive whole number, got ${periods}`);
   }
+  if (!Number.isInteger(balloonCents) || balloonCents < 0 || balloonCents >= principalCents) {
+    throw new RangeError(`Balloon must be a whole number of cents below the principal, got ${balloonCents}`);
+  }
 }
 
-/** Level payment that amortizes the principal over the given periods (standard PMT), in cents. */
+/**
+ * Level payment that amortizes the principal over the given periods (standard PMT),
+ * in cents. With a balloon, the payment is sized so that balance remains at the end.
+ */
 export function fixedPaymentCents(input: FixedPaymentInput): number {
   assertValidLoan(input);
-  const { principalCents, aprPercent, periods, frequency } = input;
+  const { principalCents, aprPercent, periods, frequency, balloonCents = 0 } = input;
   const rate = periodicRate(aprPercent, frequency);
   if (rate === 0) {
-    return roundHalfUp(principalCents / periods);
+    return roundHalfUp((principalCents - balloonCents) / periods);
   }
-  return roundHalfUp((principalCents * rate) / (1 - Math.pow(1 + rate, -periods)));
+  const discount = Math.pow(1 + rate, -periods);
+  return roundHalfUp(((principalCents - balloonCents * discount) * rate) / (1 - discount));
 }
