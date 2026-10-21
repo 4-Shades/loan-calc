@@ -36,6 +36,15 @@ export default defineConfig({
           setupFiles: ["tests/setup/component.ts"],
         },
       },
+      {
+        extends: true,
+        test: {
+          // Timing budgets: run alone (npm run test:perf) so parallel suites don't skew them.
+          name: "perf",
+          environment: "node",
+          include: ["tests/perf/**/*.test.ts"],
+        },
+      },
     ],
   },
 });

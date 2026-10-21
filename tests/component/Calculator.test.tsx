@@ -183,6 +183,36 @@ describe("Calculator form (REQ-UI-003, REQ-NFR-CODE2)", () => {
     expect(within(results()).getByText("8.32%")).toBeInTheDocument();
   });
 
+  it("shows the schedule table and charts alongside the summary (REQ-FUNC-AN01, AN02)", () => {
+    render(<Calculator />);
+    expect(screen.getByRole("table", { name: "Amortization schedule" })).toBeInTheDocument();
+    expect(screen.getByRole("figure", { name: "Balance and payments over time" })).toBeInTheDocument();
+    expect(screen.getByRole("figure", { name: "Payment breakdown" })).toBeInTheDocument();
+  });
+
+  it("updates the table as inputs change", async () => {
+    render(<Calculator />);
+    expect(screen.getByRole("status")).toHaveTextContent("of 24");
+    await replace("Term", "36");
+    expect(screen.getByRole("status")).toHaveTextContent("of 36");
+  });
+
+  it("hides the table and charts while the input is invalid", async () => {
+    render(<Calculator />);
+    await replace("Loan amount", "");
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByRole("figure")).not.toBeInTheDocument();
+  });
+
+  it("records how long each input takes to recalculate and render (REQ-NFR-PERF1)", async () => {
+    performance.clearMeasures("loancalc:recalc");
+    render(<Calculator />);
+    await replace("APR (%)", "6");
+    const measures = performance.getEntriesByName("loancalc:recalc");
+    expect(measures.length).toBeGreaterThan(0);
+    expect(measures.every((m) => m.duration >= 0)).toBe(true);
+  });
+
   it("remembers each loan type's inputs when switching back", async () => {
     render(<Calculator />);
     await replace("Loan amount", "12345");

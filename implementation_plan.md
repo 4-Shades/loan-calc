@@ -132,6 +132,14 @@ Each slice lists its tests first (Red), then the work (Green), then the exit che
 - **Green:** `useCalculation` hook (`useMemo` on validated inputs; `useDeferredValue` if rendering needs it); table with pagination plus virtualization (e.g., `@tanstack/react-virtual`); stacked or area chart of cumulative principal vs interest; donut for payment breakdown; no `router.push` or form `action` navigation anywhere.
 - Next.js: the calculator is a client component; the server component shell stays minimal to help FCP.
 - **Exit:** the slider scenario passes, with p95 render under 50 ms on the CI profile.
+- **Status:** done. All 9 calculator BDD scenarios pass in Chromium (persistence and rate-limit scenarios stay skipped until Slices 6–7). Slider: 250 recalculations, median 3.2 ms, p95 4.6 ms, max 8.2 ms (local, production build), so `useDeferredValue` was not needed. Notes:
+  - Timing is recorded in the browser: `performance.mark` on each input, `performance.measure("loancalc:recalc")` in a layout effect when the new results commit. The E2E step asserts p95 from those entries.
+  - Engine budgets run as their own Vitest project (`npm run test:perf`), not alongside the parallel property tests, so CPU contention doesn't skew them.
+  - Chart colors are the first three slots of the dataviz reference palette, validated (`--pairs all`) against this app's white and #0a0a0a surfaces. Light aqua is 2.82:1 on white, so the balance chart has a text description and the table serves as its table view.
+  - The donut follows the SRS (REQ-FUNC-AN02) although the dataviz guidance prefers a stacked bar; with no fees it has only two segments. Values and shares are printed in its legend.
+  - Line-chart end labels were skipped: series ends collide on low-interest loans (interest and balance both near $0). Identity comes from the legend, tooltip and table.
+  - Table: 12/24/60 rows per page, or "All" with TanStack Virtual (a 2,520-row MCA renders ~40 rows). The page stays put (clamped) when edits shorten the schedule.
+  - CI now runs the perf budgets and a Playwright E2E job.
 
 ### Slice 6: Docker, database, and API (DB01, INT-001, INT-002, SEC1, SEC2)
 
