@@ -1,8 +1,10 @@
 # Test-Driven Design (TDD) Plan
 ## LoanCalc-SPA: Multi-Type Loan & Amortization Engine
 
-**Derived from:** `software_requirements_specification.md` (SRS v1.0.0) and `gherkin_bdd_feature_specs.md`
-**Stack:** TypeScript (strict), Next.js App Router, PostgreSQL via `pg` with parameterized SQL (no ORM; see implementation plan D1), Zod, Docker
+**Derived from:** `software_requirements_specification.md` (SRS v1.1.0) and `gherkin_bdd_feature_specs.md`
+**Stack:** TypeScript (strict), Next.js App Router, PostgreSQL through the native `pg` pool with parameterized SQL (SRS v1.1.0 §1.3), Zod, Docker
+
+**SRS v1.1.0 changes:** the database layer only. The ORM became the native `pg` driver (§1.3, §2.1); REQ-INT-001 now names the `pg` connection pool; REQ-NFR-SEC1 now requires parameterized SQL (`$1, $2, …`); §3.5.2 Stage 2 now runs SQL migration scripts instead of ORM code generation. Functional requirements, the schema and the verification matrix are unchanged, so no BDD scenario changed.
 
 ---
 
@@ -82,13 +84,13 @@ Final state after Slice 8. Every requirement has at least one passing automated 
 | REQ-UI-001 | Slider recalculation; extra payments | BDD | `e2e/steps/performance.steps.ts` (no-reload fixture in `fixtures.ts`) |
 | REQ-UI-002 | none | E2E (320 / 768 / 1024 px) | `e2e/specs/responsive.spec.ts` |
 | REQ-UI-003 | Background (mode set) | Component, BDD | `component/ModeToggle.test.tsx`, `component/Calculator.test.tsx` |
-| REQ-INT-001 | none | Unit, integration | `unit/lib/dbConfig.test.ts`, `integration/calculations.api.test.ts` (pool reuse) |
-| REQ-INT-002 | none | Systems | `scripts/compose-smoke.sh` (`npm run test:compose`) |
+| REQ-INT-001 | none | Unit, integration | `unit/lib/dbConfig.test.ts`, `unit/lib/deployment.test.ts` (pool settings), `integration/calculations.api.test.ts` (native `pg` pool reuse) |
+| REQ-INT-002 | none | Systems, integration | `scripts/compose-smoke.sh` (`npm run test:compose`); SQL migration runner for §3.5.2: `integration/migrate.test.ts`, `unit/lib/migrate.test.ts` |
 | REQ-NFR-PERF1 | Slider under 50 ms | Perf budget, BDD | `perf/engine.budget.test.ts`, `e2e/steps/performance.steps.ts` (p95 from browser timings) |
 | REQ-NFR-PERF2 | none | Lighthouse (desktop preset) | `scripts/lighthouse.mjs` (`npm run test:lighthouse`) |
 | REQ-NFR-CODE1 | none | Static | `tsc --noEmit` (`strict`, `noUncheckedIndexedAccess`), ESLint `no-explicit-any` |
 | REQ-NFR-CODE2 | Save scenario (Zod payload) | Unit, integration | `unit/schemas/*.test.ts`, `integration/calculations.api.test.ts` |
-| REQ-NFR-SEC1 | none | Unit, integration, E2E, lint | `unit/lib/sanitize.test.ts`, `unit/lib/securityHeaders.test.ts`, `integration/calculations.api.test.ts` (XSS, SQLi), `e2e/specs/security.spec.ts`, ESLint `react/no-danger` |
+| REQ-NFR-SEC1 | none | Unit, integration, E2E, lint | `unit/lib/sanitize.test.ts`, `unit/lib/securityHeaders.test.ts`, `integration/calculations.api.test.ts` (XSS, SQLi through parameterized SQL), `e2e/specs/security.spec.ts`, ESLint `react/no-danger` |
 | REQ-NFR-SEC2 | Rate limiting | Unit, integration, BDD | `unit/lib/rateLimit.test.ts`, `integration/calculations.api.test.ts` |
 
 Requirements with no BDD scenario (AN02, UI-002, INT-001/002, PERF2, CODE1, SEC1) are covered by the tests above; adding scenarios for them is optional and would be a spec change.
@@ -279,7 +281,7 @@ Comparison-matrix fixtures come directly from the BDD data table. Note that the 
 
 ## 6. Integration Tests (API + PostgreSQL)
 
-Run against a Testcontainers Postgres with the schema from SRS §3.3 applied via migration. Each test uses a clean transaction or truncates tables.
+Run against a Testcontainers Postgres with the schema from SRS §3.3 applied by the project's own SQL migration runner (`db/migrations`, §3.5.2). Each test uses a clean transaction or truncates tables.
 
 ### 6.1 `POST /api/calculations` (REQ-FUNC-DB01)
 
@@ -289,7 +291,7 @@ Run against a Testcontainers Postgres with the schema from SRS §3.3 applied via
 | `created_at` / `updated_at` | populated by default |
 | invalid payload (Zod) | 400 with field-level errors; no row inserted |
 | title with `<script>` | stored sanitized / escaped (REQ-NFR-SEC1) |
-| title with `'; DROP TABLE saved_calculations;--` | stored literally; table intact (parameterized queries) |
+| title with `'; DROP TABLE saved_calculations;--` | stored literally; table intact (parameterized SQL, `$1, $2, …`) |
 | oversize JSON body | 413 or 400 |
 
 ### 6.2 Retrieval
@@ -312,8 +314,22 @@ it('window resets after 60s (fake timers)', ...);
 
 ### 6.4 DB connection (REQ-INT-001)
 
-- Pool is reused across requests (no new connection per request).
-- In non-local `NODE_ENV`, the connection string requires `sslmode=require` (config test).
+- One native `pg` pool is reused across requests (no new connection per request).
+- In non-local `NODE_ENV`, connections use verified TLS (config test); local and Compose hosts don't.
+- Every query in `src/lib/calculationsRepo.ts` passes values as bind parameters (`$1, $2, …`), never interpolated (REQ-NFR-SEC1); the SQL-injection test in §6.1 exercises it.
+
+### 6.5 SQL migrations (SRS §3.5.2)
+
+`db/migrations/NNNN_name.sql`, applied in order by `src/lib/migrate.ts` (`npm run db:migrate`).
+
+| Test | Expect |
+| :--- | :--- |
+| empty database | SRS §3.3 tables and the `created_at DESC` index exist; `0001_init` recorded in `schema_migrations` |
+| second run | applies nothing |
+| database created earlier by Prisma Migrate | `0001_init` recorded as applied, not re-run; existing rows kept |
+| failing migration | that file rolled back completely; error names the file; earlier files stay recorded |
+| two runs at once (concurrent deploys) | advisory lock: applied exactly once |
+| file names (unit) | `NNNN_name.sql` order; bad names, duplicate numbers and empty files rejected |
 
 ---
 

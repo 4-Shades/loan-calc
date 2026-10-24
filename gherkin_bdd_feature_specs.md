@@ -1,6 +1,6 @@
 # Language: en
 # Feature: Multi-Type Loan & Amortization Engine Specifications
-# Based on SRS Document Version 1.0.0 (LoanCalc-SPA)
+# Based on SRS Document Version 1.1.0 (LoanCalc-SPA)
 
 @calculator @personal_loans
 Feature: Personal Loan Amortization Calculations

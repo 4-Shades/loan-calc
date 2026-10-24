@@ -1,5 +1,5 @@
 # Language: en
-# Source: gherkin_bdd_feature_specs.md (SRS v1.0.0, LoanCalc-SPA)
+# Source: gherkin_bdd_feature_specs.md (SRS v1.1.0, LoanCalc-SPA)
 
 @calculator @personal_loans
 Feature: Personal Loan Amortization Calculations

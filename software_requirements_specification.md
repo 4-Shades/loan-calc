@@ -2,8 +2,8 @@
 ## Single-Page Web Application: Multi-Type Loan & Amortization Engine
 
 **Project:** LoanCalc-SPA  
-**Document Version:** 1.0.0  
-**Date:** October 20, 2026  
+**Document Version:** 1.1.0  
+**Date:** October 24, 2026  
 **Tech Stack:** TypeScript, Next.js (App Router), PostgreSQL, Docker  
 
 ---
@@ -26,7 +26,7 @@ The system enables users to:
 * **Frontend:** Next.js (App Router / React), TypeScript, Tailwind CSS, Shadcn UI / Chart.js / Recharts.
 * **Backend API:** Next.js API Routes / Server Actions using TypeScript.
 * **Database:** PostgreSQL for persistent scenario storage, user audit logs, and loan product templates.
-* **ORM:** Prisma or Drizzle ORM (TypeScript native).
+* **Database Driver:** Native PostgreSQL client (`pg`) for connection pooling and parameterized query execution.
 * **Containerization:** Docker & Docker Compose (Multi-stage builds for Dev and Production).
 
 ---
@@ -40,7 +40,7 @@ The system operates as an autonomous, containerized web application. It operates
        │  (HTTPS / REST / Server Actions)
        ▼
 [ Next.js Container (TypeScript / React) ]
-       │  (TCP / SQL via ORM)
+       │  (TCP / Native SQL Queries via pg pool)
        ▼
 [ PostgreSQL Container (Data Persistence) ]
 ```
@@ -68,7 +68,7 @@ The system operates as an autonomous, containerized web application. It operates
 * **[REQ-UI-003] Calculation Modes:** The application MUST provide a toggle to switch between **Personal Loan Mode** and **Business Loan Mode**.
 
 #### 3.1.2 Software & Database Interfaces
-* **[REQ-INT-001] Database Driver:** Connection to PostgreSQL MUST be secured using SSL/TLS in non-local environments and pooled efficiently using Prisma Client or Drizzle ORM.
+* **[REQ-INT-001] Database Driver:** Connection to PostgreSQL MUST be secured using SSL/TLS in non-local environments and pooled efficiently using the native `pg` connection pool.
 * **[REQ-INT-002] Containerization:** Docker Compose MUST expose the application on port `3000` and internal PostgreSQL on port `5432`.
 
 ---
@@ -160,7 +160,7 @@ CREATE INDEX idx_calculations_created ON saved_calculations(created_at DESC);
 * **[REQ-NFR-CODE2] Zod Validation:** All API endpoints and client form inputs MUST be validated using **Zod** schemas.
 
 #### 3.4.3 Security
-* **[REQ-NFR-SEC1] Input Sanitization:** All raw text fields (e.g., calculation title) MUST be sanitized to prevent XSS and SQL Injection via ORM parameterized queries.
+* **[REQ-NFR-SEC1] Input Sanitization:** All raw text fields (e.g., calculation title) MUST be sanitized to prevent XSS and SQL Injection via parameterized SQL queries (`$1, $2, ...`).
 * **[REQ-NFR-SEC2] CORS & Rate Limiting:** API routes MUST enforce rate limiting (e.g., max 60 requests per minute per IP for persistence actions).
 
 ---
@@ -212,7 +212,7 @@ volumes:
 
 #### 3.5.2 Multi-Stage Dockerfile Strategy
 1. **Stage 1 (deps):** Install `node_modules` based on `package.json` / `package-lock.json`.
-2. **Stage 2 (builder):** Compile Next.js build assets & run Prisma/Drizzle generate scripts.
+2. **Stage 2 (builder):** Compile Next.js build assets & run SQL migration scripts.
 3. **Stage 3 (runner):** Create a minimal standalone Node environment using non-root user execution (`USER node`).
 
 ---

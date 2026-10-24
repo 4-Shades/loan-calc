@@ -1,7 +1,9 @@
 # Implementation Plan
 ## LoanCalc-SPA: Multi-Type Loan & Amortization Engine
 
-**Inputs:** `software_requirements_specification.md` (SRS), `gherkin_bdd_feature_specs.md` (BDD), `tdd_design.md` (TDD)
+**Inputs:** `software_requirements_specification.md` (SRS v1.1.0), `gherkin_bdd_feature_specs.md` (BDD), `tdd_design.md` (TDD)
+
+**SRS v1.1.0 (October 24, 2026)** replaced the ORM with the native `pg` driver (§1.3, REQ-INT-001), required parameterized SQL (REQ-NFR-SEC1), and changed Dockerfile Stage 2 to run SQL migration scripts (§3.5.2). This matches what was built when Prisma was removed (see "After Slice 9: Prisma removed"), so no code changes followed. Functional requirements are unchanged.
 **Approach:** vertical slices, test-first. Each slice starts with failing tests from the TDD plan and ends with them green.
 
 ---
@@ -12,7 +14,7 @@ These are defaults I would use. Items marked **Open** come from TDD §8 and need
 
 | # | Decision | Default | Status |
 | :-- | :--- | :--- | :--- |
-| D1 | Database access | **No ORM** (changed after Slice 9; Prisma removed). Parameterized SQL through `pg` (`src/lib/calculationsRepo.ts`), and plain SQL migrations in `db/migrations` applied by `src/lib/migrate.ts`. **Deviates from the SRS wording:** REQ-INT-001 names "Prisma Client or Drizzle ORM" and REQ-NFR-SEC1 says "ORM parameterized queries". The intent (a pooled connection, bind parameters for every value) is still met and tested | Decided (changed) |
+| D1 | Database access | **Native `pg`, no ORM** (Prisma removed after Slice 9). Parameterized SQL through the shared `pg` pool (`src/lib/calculationsRepo.ts`), plain SQL migrations in `db/migrations` applied by `src/lib/migrate.ts`. Now required by SRS v1.1.0 (§1.3, REQ-INT-001, REQ-NFR-SEC1) | Decided (per SRS v1.1.0) |
 | D2 | Charts | Recharts (React-native, simple donut + area charts) | Proposed |
 | D3 | Styling | Tailwind CSS v4, CSS-first (no config file), loaded through `@tailwindcss/turbopack`; native elements styled with utilities. shadcn/ui was not needed and not adopted | Decided |
 | D4 | Money arithmetic | Integer cents internally; round half-up per period | Proposed |
@@ -25,6 +27,7 @@ These are defaults I would use. Items marked **Open** come from TDD §8 and need
 | D11 | Revolving minimum | % of current balance each period, no floor | Decided |
 | D12 | Fees on term/SBA loans | Deducted from proceeds: payments on the full amount, fees in a period-0 closing row, Effective APR on net proceeds. Applies to all business loan types | Decided |
 | D13 | Auth | None. The SRS defines no users; saved calculations are global | Per SRS |
+| D19 | Where migrations run (SRS §3.5.2) | §3.5.2 puts "run SQL migration scripts" in the builder stage, but no database is reachable during `docker build`. The `migrate` image target is built from the builder stage and runs `npm run db:migrate` when the Compose stack starts, before the app; on Vercel, `vercel-build` runs it. Interpreted as satisfying §3.5.2 | Decided |
 | D14 | Hosting | Vercel for production and per-PR preview deployments. Docker Compose stays for self-hosting and REQ-INT-002 | Decided |
 | D15 | Database on Vercel | **Neon** (serverless PostgreSQL, via the Vercel Marketplace integration), replacing Prisma Postgres. Through the existing `pg` pool and Prisma ORM: the **pooled** connection string (host contains `-pooler`) for the app (`DATABASE_URL`), the **direct/unpooled** one for migrations (`DIRECT_URL`, which the Neon integration also provides as `DATABASE_URL_UNPOOLED`), `sslmode=require`. Neon is only the host: the ORM stays Prisma (SRS §1.3 allows Prisma or Drizzle) | Decided (changed from Prisma Postgres) |
 | D16 | Rate limiting on Vercel | **Upstash Redis** (Vercel Marketplace) behind a `RateLimiter` interface: an atomic Lua sliding window, same semantics as the in-memory store (which stays for Docker and tests). Fails open if Redis is down | Decided |
@@ -174,16 +177,24 @@ Each slice lists its tests first (Red), then the work (Green), then the exit che
 
 ### Slice 6: Docker, database, and API (DB01, INT-001, INT-002, SEC1, SEC2)
 
-- **Red:** Testcontainers integration tests (TDD §6); `rateLimit.test.ts`; `sanitize.test.ts`; `compose.smoke.sh`.
+- **Red:** Testcontainers integration tests (TDD §6, including §6.5 for the SQL migration runner); `rateLimit.test.ts`; `sanitize.test.ts`; `migrate.test.ts` (file loading); `compose.smoke.sh`.
 - **Green:**
   - `docker-compose.yml` from the SRS (port 3000 / 5432, healthcheck, `depends_on: service_healthy`). Move the DB password to an `.env` file that is not committed; the SRS example hard-codes it.
-  - Multi-stage `Dockerfile` (deps → builder, runs `prisma generate` and `next build` with `output: 'standalone'` → runner with `USER node`). The app container runs `prisma migrate deploy` on start.
-  - `lib/db.ts`: singleton Prisma client (avoids connection storms in dev hot reload); SSL required when `NODE_ENV=production` and the host is not local.
+  - Multi-stage `Dockerfile` (SRS §3.5.2): deps → builder (`next build` with `output: 'standalone'`) → runner with `USER node`. A `migrate` target built from the builder stage runs the SQL migration scripts (`npm run db:migrate`) as a one-shot Compose service before the app starts (D19).
+  - SQL migrations: `db/migrations/NNNN_name.sql` applied in order by `src/lib/migrate.ts`, each file in its own transaction, recorded in `schema_migrations`, under a PostgreSQL advisory lock. A database created earlier by Prisma Migrate has `0001_init` recorded instead of re-run.
+  - `lib/db.ts`: one native `pg` pool per process (REQ-INT-001; avoids connection storms in dev hot reload), verified TLS for remote hosts in production, idle-client errors logged instead of crashing.
+  - `lib/calculationsRepo.ts`: insert, list, find and ping as SQL with bind parameters (`$1, $2, …`) only (REQ-NFR-SEC1).
   - `POST /api/calculations`: rate limit → body-size check → Zod parse → sanitize title → server-side recompute and compare → insert → `201 { id }`. Errors return JSON `{ error, details? }`; 429 includes `Retry-After`.
   - `GET /api/calculations` (newest first, paginated) and `GET /api/calculations/[id]`.
   - `SaveForm`: toast with the UUID on success.
 - **Exit:** `docker compose up --build` works on a clean checkout; the Save scenario and the 429 scenario pass; data survives an app restart.
-- **Status:** done. `npm run test:compose` builds the stack from scratch, saves, restarts the app, reads the row back and confirms uid 1000 (`node`); the Save and 429 BDD scenarios pass; 21 integration tests pass against PostgreSQL 16 in Testcontainers. Changes and choices:
+- **Updated for SRS v1.1.0:** first built on Prisma; rebuilt on the native `pg` pool and SQL migrations (see "After Slice 9: Prisma removed"). The status notes below that mention Prisma describe the first build.
+- **Re-verified on the native `pg` stack (October 24, 2026):**
+  - Integration: 31 passed against PostgreSQL 16 (21 API, 5 SQL migration runner, 5 Redis rate-limit contract).
+  - `npm run db:up` on the existing local database: it had been created by Prisma Migrate; `0001_init` was already recorded in `schema_migrations` (adopted, not re-run, `_prisma_migrations` left in place); the run reported "Database is up to date".
+  - E2E: all 38 passed, none skipped (Save, comparison and 429 included); slider p95 12.2 ms.
+  - `npm run test:compose`: built from scratch, migrate service ran before the app, health check reached the database, the saved row survived an app restart, app runs as uid 1000.
+- **Status (first build):** done. `npm run test:compose` builds the stack from scratch, saves, restarts the app, reads the row back and confirms uid 1000 (`node`); the Save and 429 BDD scenarios pass; 21 integration tests pass against PostgreSQL 16 in Testcontainers. Changes and choices:
   - The client sends only `{ title, input }`; the server recomputes and stores the summary (rather than recomputing and comparing), so stored results always follow from stored inputs. Extra keys are rejected.
   - Prisma 7 needs a driver adapter: `@prisma/adapter-pg` with a pooled `pg` connection; TLS is required for remote databases in production (`DATABASE_SSL` overrides).
   - Migrations run in a one-shot `migrate` Compose service (the builder stage), so the runner image stays minimal (216 MB). The migrator image is large (1.16 GB); slimming it is a later optimization.
@@ -263,6 +274,12 @@ SRS §3.5 requires deployment with Docker Compose, so Vercel is an *additional* 
   - `.env.example`: Neon-style example URLs.
   - Nothing in the application code, the schema or the migrations changes: Neon is standard PostgreSQL 16+.
   - Still to confirm on the first real preview: that the branch's variables are present during the build (when `vercel-build` migrates), not only at runtime.
+- **Verified locally (October 24, 2026)**, everything short of a real deployment:
+  - `npm run vercel-build` with Vercel's variables (`VERCEL=1`, `VERCEL_ENV=preview`, `DATABASE_URL` / `DATABASE_URL_UNPOOLED`, Upstash placeholders): the guard passed, migrations ran through the direct URL, and the build produced Vercel output (no standalone server).
+  - Remote E2E mode against that build served locally, run as `preview.yml` does: 34 passed with the 3 `@db-direct` tests correctly excluded (no database URL), then the rate-limit scenario alone passed.
+  - Lighthouse remote mode (`LH_URL`): median FCP 228 ms (budget < 1.2 s), PASS.
+  - Fixed on the way: the Lighthouse script crashed when a secondary metric (CLS) came back without a value, and passed `extraHeaders: undefined` without a bypass secret. It now reports missing secondary metrics as empty, only sends `extraHeaders` when set, fails clearly on Lighthouse run errors and on a missing FCP, and retries a run up to twice on Lighthouse's transient trace errors (e.g. `NO_NAVSTART`).
+  - Not verifiable without your Vercel project: a real preview and production deployment, Neon branch variables being present during the build, and the rate limit holding across real function instances.
 - **Status:** code and tests done; deployment not yet performed (needs your Vercel project, see the README checklist). What changed against the plan above:
   - D17 switched to migrating inside `vercel-build` (see the decisions table); there is no separate CI migration job. (The Prisma Postgres code pass also assumed a shared preview database; with Neon, D18 is a branch per preview.)
   - The rate-limit contract (5 behavioral cases) runs against the memory store in unit tests and against real Redis 7 behind an Upstash-compatible REST proxy (SRH) in integration tests. The SRH image is community-maintained and was last updated in 2024; it is used only in tests.
@@ -272,7 +289,7 @@ SRS §3.5 requires deployment with Docker Compose, so Vercel is an *additional* 
 
 ### After Slice 9: Prisma removed
 
-Prisma (ORM, client generator and Migrate) was removed entirely, and the project standardized on npm.
+Prisma (ORM, client generator and Migrate) was removed entirely, and the project standardized on npm. SRS v1.1.0 later made this the requirement (native `pg` driver, parameterized SQL, SQL migration scripts).
 
 - **Database access:** `src/lib/calculationsRepo.ts` (insert, list, find, ping) with bind parameters over the shared `pg` pool in `src/lib/db.ts`. The pool logs errors from idle clients instead of crashing (Neon can drop idle connections when it suspends). The API routes and their responses are unchanged.
 - **Migrations:** `db/migrations/0001_init.sql` is the former Prisma migration, unchanged. `src/lib/migrate.ts` applies pending files in order, each in its own transaction, records them in `schema_migrations`, and takes a PostgreSQL advisory lock so concurrent deploys can't race. A database that Prisma Migrate already created (its tables exist but `schema_migrations` is empty) gets `0001_init` recorded as applied instead of run again. `npm run db:migrate` runs it locally, in the Docker `migrate` service and in `vercel-build`.

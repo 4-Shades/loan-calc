@@ -21,6 +21,23 @@ const server = process.env.LH_URL
 const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
 const extraHeaders = bypass ? { "x-vercel-protection-bypass": bypass, "x-vercel-set-bypass-cookie": "true" } : undefined;
 
+// Trace-recording failures Lighthouse itself says to retry; anything else fails the run.
+const TRANSIENT = new Set(["NO_NAVSTART", "NO_TRACING_STARTED", "NO_DCL", "NO_LCP"]);
+const MAX_ATTEMPTS = 3;
+
+async function audit(port, run) {
+  const flags = { port, output: "html", onlyCategories: ["performance"], ...(extraHeaders && { extraHeaders }) };
+  for (let attempt = 1; ; attempt++) {
+    const result = await lighthouse(URL, flags, desktopConfig);
+    const error = result.lhr.runtimeError;
+    if (!error) return result;
+    if (!TRANSIENT.has(error.code) || attempt === MAX_ATTEMPTS) {
+      throw new Error(`Lighthouse run ${run} failed: ${error.code} ${error.message}`);
+    }
+    console.warn(`Run ${run}: ${error.code}, retrying (attempt ${attempt + 1} of ${MAX_ATTEMPTS})`);
+  }
+}
+
 async function waitForServer() {
   for (let i = 0; i < 60; i++) {
     try {
@@ -44,15 +61,20 @@ try {
   const results = [];
   let lastReport = "";
   for (let run = 1; run <= RUNS; run++) {
-    const result = await lighthouse(URL, { port: chrome.port, output: "html", onlyCategories: ["performance"], extraHeaders }, desktopConfig);
-    const audits = result.lhr.audits;
+    const result = await audit(chrome.port, run);
+    const { audits, categories } = result.lhr;
+    // Secondary metrics occasionally come back without a value; report them as empty rather than crash.
+    const metric = (id) => audits[id]?.numericValue ?? null;
+    const fcp = metric("first-contentful-paint");
+    if (fcp === null) throw new Error(`Lighthouse run ${run} produced no First Contentful Paint`);
+    const round = (value, digits = 0) => (value === null ? null : Number(value.toFixed(digits)));
     results.push({
       run,
-      fcpMs: Math.round(audits["first-contentful-paint"].numericValue),
-      lcpMs: Math.round(audits["largest-contentful-paint"].numericValue),
-      tbtMs: Math.round(audits["total-blocking-time"].numericValue),
-      cls: Number(audits["cumulative-layout-shift"].numericValue.toFixed(3)),
-      score: Math.round(result.lhr.categories.performance.score * 100),
+      fcpMs: Math.round(fcp),
+      lcpMs: round(metric("largest-contentful-paint")),
+      tbtMs: round(metric("total-blocking-time")),
+      cls: round(metric("cumulative-layout-shift"), 3),
+      score: categories.performance.score === null ? null : Math.round(categories.performance.score * 100),
     });
     lastReport = result.report;
   }
