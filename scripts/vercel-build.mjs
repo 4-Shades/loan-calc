@@ -19,5 +19,5 @@ function run(command) {
 }
 
 console.log(`Deploying to Vercel environment: ${process.env.VERCEL_ENV ?? "unknown"}`);
-run("npx prisma migrate deploy"); // direct URL via prisma.config.ts (DIRECT_URL or DATABASE_URL_UNPOOLED)
+run("npm run db:migrate"); // direct URL: DIRECT_URL or DATABASE_URL_UNPOOLED
 run("npm run build");

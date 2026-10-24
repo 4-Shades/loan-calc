@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "next build",
     "start": "next start",
     "vercel-build": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/vercel-build.mjs",
     "lint": "eslint",
@@ -19,18 +19,14 @@
     "test:e2e": "bddgen && playwright test",
     "test:compose": "bash scripts/compose-smoke.sh",
     "test:lighthouse": "npm run build && node scripts/lighthouse.mjs",
-    "db:generate": "prisma generate",
-    "db:validate": "prisma validate",
-    "db:up": "docker compose up -d --wait postgres && prisma migrate deploy",
-    "db:migrate": "prisma migrate deploy",
-    "verify": "npm run db:generate && npm run typecheck && npm run lint && npm run test"
+    "db:up": "docker compose up -d --wait postgres && npm run db:migrate",
+    "db:migrate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/migrate.mjs",
+    "verify": "npm run typecheck && npm run lint && npm run test"
   },
   "engines": {
     "node": ">=24"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "7.10.1",
-    "@prisma/client": "^7.10.1",
     "@tanstack/react-virtual": "^3.14.21",
     "@upstash/redis": "^1.39.0",
     "@vercel/functions": "^3.10.2",
@@ -67,10 +63,14 @@
     "jsdom": "^30.1.3",
     "lighthouse": "^13.5.0",
     "playwright-bdd": "^9.2.1",
-    "prisma": "8.0.0-rc.24",
     "tailwindcss": "^4",
     "testcontainers": "^12.2.1",
     "typescript": "^5",
     "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "@vercel/cli-config": {
+      "zod": "$zod"
+    }
   }
 }

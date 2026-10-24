@@ -2,7 +2,7 @@
 ## LoanCalc-SPA: Multi-Type Loan & Amortization Engine
 
 **Derived from:** `software_requirements_specification.md` (SRS v1.0.0) and `gherkin_bdd_feature_specs.md`
-**Stack:** TypeScript (strict), Next.js App Router, PostgreSQL, Prisma/Drizzle, Zod, Docker
+**Stack:** TypeScript (strict), Next.js App Router, PostgreSQL via `pg` with parameterized SQL (no ORM; see implementation plan D1), Zod, Docker
 
 ---
 

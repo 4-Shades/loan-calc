@@ -1,7 +1,7 @@
 import { z } from "zod";
-import type { Prisma } from "@/generated/prisma/client";
 import { calculateLoan } from "@/lib/calculateLoan";
-import { getPrisma } from "@/lib/db";
+import { insertCalculation, listCalculations } from "@/lib/calculationsRepo";
+import { getPool } from "@/lib/db";
 import { isJson, isSameOrigin, jsonError, readLimitedText, validationError } from "@/lib/http";
 import { clientIp } from "@/lib/rateLimit";
 import { createRateLimiter, rateLimitStoreFromEnv } from "@/lib/rateLimitConfig";
@@ -51,15 +51,11 @@ export async function POST(request: Request): Promise<Response> {
   if (!outcome.ok) return jsonError(422, outcome.error);
 
   try {
-    const saved = await getPrisma().savedCalculation.create({
-      data: {
-        title,
-        loanType: input.loanType,
-        // Round-trip through JSON so optional fields that are undefined are dropped.
-        inputs: JSON.parse(JSON.stringify(input)) as Prisma.InputJsonObject,
-        summaryResults: toStoredSummary(input, outcome.result),
-      },
-      select: { id: true, title: true, loanType: true, createdAt: true },
+    const saved = await insertCalculation(getPool(), {
+      title,
+      loanType: input.loanType,
+      inputs: input,
+      summaryResults: toStoredSummary(input, outcome.result),
     });
     return Response.json(saved, { status: 201, headers: { Location: `/api/calculations/${saved.id}` } });
   } catch (error) {
@@ -80,12 +76,7 @@ export async function GET(request: Request): Promise<Response> {
   if (!query.success) return validationError("Invalid query", query.error);
   const { limit, offset } = query.data;
 
-  const rows = await getPrisma().savedCalculation.findMany({
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    skip: offset,
-    select: { id: true, title: true, loanType: true, summaryResults: true, createdAt: true },
-  });
+  const rows = await listCalculations(getPool(), { limit, offset });
   const items = rows.map(({ summaryResults, ...row }) => ({ ...row, summary: storedSummarySchema.parse(summaryResults) }));
   return Response.json({ items, limit, offset });
 }

@@ -9,7 +9,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
-# Stage 2 (builder): generate the Prisma client and build the standalone Next.js server.
+# Stage 2 (builder): build the standalone Next.js server.
 FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -17,9 +17,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-# Migrator: applies prisma/migrations, then exits. docker-compose runs it before the app.
+# Migrator: applies db/migrations, then exits. docker-compose runs it before the app.
 FROM builder AS migrator
-CMD ["npx", "prisma", "migrate", "deploy"]
+CMD ["npm", "run", "db:migrate"]
 
 # Stage 3 (runner): minimal image with only the traced server files, run as a non-root user.
 FROM ${NODE_IMAGE} AS runner

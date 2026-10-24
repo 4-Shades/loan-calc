@@ -8,7 +8,6 @@ coverage
 playwright-report
 test-results
 .features-gen
-src/generated
 .env
 .env.*
 !.env.example

@@ -34,9 +34,6 @@ yarn-error.log*
 .env*
 !.env.example
 
-# prisma generated client
-/src/generated/
-
 # playwright / playwright-bdd
 /playwright-report/
 /test-results/

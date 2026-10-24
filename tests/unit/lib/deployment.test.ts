@@ -46,7 +46,7 @@ describe("poolConfig (REQ-INT-001 on Docker and Vercel)", () => {
   });
 });
 
-describe("migrationUrl (prisma.config.ts, D17)", () => {
+describe("migrationUrl (scripts/migrate.mjs, D17)", () => {
   it("prefers an explicit DIRECT_URL", () => {
     expect(migrationUrl({ DIRECT_URL: NEON_DIRECT, DATABASE_URL_UNPOOLED: "other", DATABASE_URL: NEON_POOLED })).toBe(NEON_DIRECT);
   });

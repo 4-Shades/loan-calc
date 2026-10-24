@@ -16,14 +16,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run db:generate
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run test:coverage
-      - name: Prisma schema is valid
-        run: npm run db:validate
-        env:
-          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
       - name: Engine performance budgets (REQ-NFR-PERF1)
         run: npm run test:perf
 
@@ -37,7 +32,6 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run db:generate
       - run: npm run test:integration
 
   e2e:
@@ -64,7 +58,6 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run db:generate
       - run: npm run db:migrate
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
@@ -92,7 +85,6 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run db:generate
       # GitHub's Ubuntu runners ship Google Chrome, which chrome-launcher finds on its own.
       - run: npm run test:lighthouse
       - uses: actions/upload-artifact@v4

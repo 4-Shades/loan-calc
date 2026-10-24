@@ -21,7 +21,7 @@ cp .env.example .env      # set POSTGRES_PASSWORD (and DATABASE_URL to match)
 docker compose up --build # PostgreSQL → migrations → app on http://localhost:3000
 ```
 
-The `migrate` service applies `prisma/migrations` and exits before the app starts. Data lives in the `pgdata` volume. If another PostgreSQL already uses port 5432 on your machine, set `POSTGRES_PORT` (e.g. 55432) in `.env` and use that port in `DATABASE_URL`.
+The `migrate` service applies `db/migrations` and exits before the app starts. Data lives in the `pgdata` volume. If another PostgreSQL already uses port 5432 on your machine, set `POSTGRES_PORT` (e.g. 55432) in `.env` and use that port in `DATABASE_URL`.
 
 ## Deploy to Vercel
 
@@ -43,7 +43,7 @@ Vercel is a second deployment target next to Docker Compose. The same code runs 
 **What happens on deploy:** Vercel runs `npm run vercel-build`, which does three things:
 
 1. It stops with a list of anything missing among the variables above.
-2. It runs `prisma migrate deploy` against the direct URL, which is that deployment's own database: the production branch, or the preview's branch. It refuses a pooled (`-pooler`) host.
+2. It runs the SQL migrations (`npm run db:migrate`) against the direct URL, which is that deployment's own database: the production branch, or the preview's branch. It refuses a pooled (`-pooler`) host.
 3. It builds the app.
 
 Write migrations expand-then-contract, so that the deployment still serving traffic keeps working while a new one migrates.
@@ -59,6 +59,17 @@ npm run db:generate
 npm run db:up             # PostgreSQL from docker compose + migrations
 npm run dev               # http://localhost:3000
 ```
+
+## Database
+
+There is no ORM. `src/lib/calculationsRepo.ts` holds every query as parameterized SQL over a shared `pg` pool (`src/lib/db.ts`); values are always bind parameters, never string-built.
+
+Schema changes are plain SQL files in `db/migrations`, named `NNNN_description.sql` and applied in order by `npm run db:migrate`:
+
+- Each file runs in its own transaction; a failure rolls that file back and stops the run.
+- Applied files are recorded in the `schema_migrations` table; a PostgreSQL advisory lock keeps two deploys from migrating at once.
+- Never edit a migration that has run anywhere; add a new file instead, written expand-then-contract so the running version keeps working.
+- A database first set up by Prisma Migrate (before Prisma was removed) has `0001_init` recorded as applied, without re-running it.
 
 ## API
 
@@ -79,19 +90,19 @@ Rate limiting is in memory, per process, on Docker. On Vercel the counts live in
 
 | Script | What it does |
 | :--- | :--- |
-| `npm run verify` | Prisma generate, typecheck, lint, unit + component tests |
+| `npm run verify` | Typecheck, lint, unit + component tests |
 | `npm test` | Unit + component tests (no Docker needed) |
 | `npm run test:watch` | Unit + component tests in watch mode |
 | `npm run test:unit` / `test:component` | One Vitest project |
 | `npm run test:coverage` | Unit + component tests with coverage gates (engine 90%, overall 80%) |
 | `npm run test:integration` | API route handlers against PostgreSQL 16, and the rate-limit contract against Redis 7, in Testcontainers (needs Docker) |
 | `npm run test:perf` | Engine performance budgets (REQ-NFR-PERF1), run on their own |
-| `npm run vercel-build` | What Vercel runs: env check, `prisma migrate deploy` (via `DATABASE_URL_UNPOOLED` / `DIRECT_URL`), build. Not for local use |
+| `npm run vercel-build` | What Vercel runs: env check, SQL migrations (via `DATABASE_URL_UNPOOLED` / `DIRECT_URL`), build. Not for local use |
 | `npm run test:e2e` | Playwright against a fresh production build on port 3100: BDD scenarios from `features/*.feature` plus responsive, accessibility (axe, WCAG 2.1 AA) and security specs (needs `DATABASE_URL`, e.g. `npm run db:up`) |
 | `npm run test:compose` | Systems test: builds and runs the full Compose stack as a throwaway project (REQ-INT-002) |
 | `npm run test:lighthouse` | Lighthouse desktop preset, median of 3 runs; fails if First Contentful Paint ≥ 1.2 s (REQ-NFR-PERF2). Needs Chrome, or set `CHROME_PATH` (e.g. to Edge) |
-| `npm run db:up` / `db:migrate` | Start PostgreSQL and apply migrations / apply migrations only |
-| `npm run db:generate` / `db:validate` | Prisma client generation / schema validation |
+| `npm run db:up` | Start PostgreSQL from Docker Compose and apply migrations |
+| `npm run db:migrate` | Apply pending `db/migrations/*.sql` (uses the direct URL; loads `.env` locally) |
 
 ## Test layout
 

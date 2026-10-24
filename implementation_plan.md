@@ -12,7 +12,7 @@ These are defaults I would use. Items marked **Open** come from TDD §8 and need
 
 | # | Decision | Default | Status |
 | :-- | :--- | :--- | :--- |
-| D1 | ORM | Prisma (mature migrations, works with Testcontainers) | Proposed |
+| D1 | Database access | **No ORM** (changed after Slice 9; Prisma removed). Parameterized SQL through `pg` (`src/lib/calculationsRepo.ts`), and plain SQL migrations in `db/migrations` applied by `src/lib/migrate.ts`. **Deviates from the SRS wording:** REQ-INT-001 names "Prisma Client or Drizzle ORM" and REQ-NFR-SEC1 says "ORM parameterized queries". The intent (a pooled connection, bind parameters for every value) is still met and tested | Decided (changed) |
 | D2 | Charts | Recharts (React-native, simple donut + area charts) | Proposed |
 | D3 | Styling | Tailwind CSS v4, CSS-first (no config file), loaded through `@tailwindcss/turbopack`; native elements styled with utilities. shadcn/ui was not needed and not adopted | Decided |
 | D4 | Money arithmetic | Integer cents internally; round half-up per period | Proposed |
@@ -28,7 +28,7 @@ These are defaults I would use. Items marked **Open** come from TDD §8 and need
 | D14 | Hosting | Vercel for production and per-PR preview deployments. Docker Compose stays for self-hosting and REQ-INT-002 | Decided |
 | D15 | Database on Vercel | **Neon** (serverless PostgreSQL, via the Vercel Marketplace integration), replacing Prisma Postgres. Through the existing `pg` pool and Prisma ORM: the **pooled** connection string (host contains `-pooler`) for the app (`DATABASE_URL`), the **direct/unpooled** one for migrations (`DIRECT_URL`, which the Neon integration also provides as `DATABASE_URL_UNPOOLED`), `sslmode=require`. Neon is only the host: the ORM stays Prisma (SRS §1.3 allows Prisma or Drizzle) | Decided (changed from Prisma Postgres) |
 | D16 | Rate limiting on Vercel | **Upstash Redis** (Vercel Marketplace) behind a `RateLimiter` interface: an atomic Lua sliding window, same semantics as the in-memory store (which stays for Docker and tests). Fails open if Redis is down | Decided |
-| D17 | Migrations on Vercel | `prisma migrate deploy` inside `vercel-build` (Prisma's documented approach), against that environment's own direct URL. Safe because every preview has its own Neon branch (D18); the build refuses to run without an explicit direct URL. Avoids fighting Vercel's automatic promotion | Decided |
+| D17 | Migrations on Vercel | `npm run db:migrate` (the SQL runner) inside `vercel-build`, against that deployment's own direct URL. Safe because every preview has its own Neon branch (D18); the build refuses to run without an explicit direct URL. Avoids fighting Vercel's automatic promotion | Decided |
 | D18 | Preview databases | **A Neon branch per preview deployment** (`preview/<git-branch>`), created by the Neon–Vercel integration as a copy-on-write branch of production, with its connection strings injected into that deployment only. Neon deletes it when Vercel removes the deployment, which under Vercel's default retention can be months later. Previews never touch production data or each other. Replaces the shared preview database | Decided (changed) |
 
 ---
@@ -53,7 +53,7 @@ src/
   lib/
     csv.ts  pdf.ts  rateLimit.ts  sanitize.ts  db.ts  format.ts
   hooks/useCalculation.ts  # memoized engine call on input change
-prisma/schema.prisma  prisma/migrations/
+db/migrations/            # NNNN_name.sql, applied by src/lib/migrate.ts (Prisma was removed after Slice 9)
 features/*.feature        # Gherkin, split per feature
 tests/{unit,component,integration,e2e}/
 Dockerfile  docker-compose.yml  .github/workflows/ci.yml
@@ -239,7 +239,7 @@ SRS §3.5 requires deployment with Docker Compose, so Vercel is an *additional* 
   - `next.config.ts`: `output: process.env.VERCEL ? undefined : "standalone"`. Security headers already come from `next.config.ts`, so they apply on Vercel unchanged.
   - `RateLimiter` interface with an async `check`, plus `memory` and `redis` implementations chosen by environment variables (e.g. `RATE_LIMIT_STORE`, plus the store's URL and token). The API route awaits it.
   - `db.ts`: small pool per function instance (`DATABASE_POOL_MAX`, e.g. 3) on the pooled connection string. Idle clients are released when an instance suspends; Vercel provides a helper for this in `@vercel/functions` (check the current API when implementing).
-  - `prisma.config.ts`: migrations use the direct URL when set (`DIRECT_URL ?? DATABASE_URL_UNPOOLED ?? DATABASE_URL`); the app keeps using the pooled `DATABASE_URL`. The pooled Neon connection runs PgBouncer in transaction mode, so the app must not rely on session state (it doesn't).
+  - Migrations use the direct URL when set (`DIRECT_URL ?? DATABASE_URL_UNPOOLED ?? DATABASE_URL`, `migrationUrl()` in `deployEnv.ts`); the app keeps using the pooled `DATABASE_URL`. The pooled Neon connection runs PgBouncer in transaction mode, so the app must not rely on session state (it doesn't).
   - Vercel project settings:
     - Next.js framework preset, Node 24.
     - Function region co-located with the database.
@@ -256,7 +256,7 @@ SRS §3.5 requires deployment with Docker Compose, so Vercel is an *additional* 
   - The rate limit holds across function instances: the contract tests pass against Redis, and the 429 scenario passes on the preview.
   - The Docker Compose smoke test still passes.
 - **Neon rework: done.** Checked against Neon's current Vercel integration docs: it injects `DATABASE_URL` (pooled, PgBouncer) and `DATABASE_URL_UNPOOLED` (direct). Changes made:
-  - `deployEnv.ts`: `migrationUrl()` (`DIRECT_URL` → `DATABASE_URL_UNPOOLED` → `DATABASE_URL`), used by `prisma.config.ts`. The `vercel-build` guard accepts either direct name and refuses a `-pooler` host as the direct URL. Tests cover all of these.
+  - `deployEnv.ts`: `migrationUrl()` (`DIRECT_URL` → `DATABASE_URL_UNPOOLED` → `DATABASE_URL`), used by the migration script (originally `prisma.config.ts`). The `vercel-build` guard accepts either direct name and refuses a `-pooler` host as the direct URL. Tests cover all of these.
   - `dbConfig` tests: Neon pooled and direct hosts get verified TLS, with or without `sslmode` in the URL (no code change was needed).
   - `deployment.ts`: `connectionTimeoutMillis` 15 s on Vercel (a suspended Neon compute must start first), 5 s on Docker (previously no timeout).
   - README "Deploy to Vercel" now describes the Neon integration: the production branch plus a branch per preview.
@@ -268,7 +268,18 @@ SRS §3.5 requires deployment with Docker Compose, so Vercel is an *additional* 
   - The rate-limit contract (5 behavioral cases) runs against the memory store in unit tests and against real Redis 7 behind an Upstash-compatible REST proxy (SRH) in integration tests. The SRH image is community-maintained and was last updated in 2024; it is used only in tests.
   - On Vercel, `clientIp` trusts `x-vercel-forwarded-for`: Vercel documents that it overwrites the forwarding headers, so the spoofing caveat for Docker doesn't apply there.
   - `db.ts` now builds a `pg` `Pool` (5 connections, 5 s idle timeout on Vercel; 10 / 10 s on Docker) and calls `attachDatabasePool` on Vercel.
-  - The `build` script runs `prisma generate` itself, so Vercel and Docker both get the generated client.
+  - The `build` script ran `prisma generate` itself; since Prisma was removed it is just `next build`.
+
+### After Slice 9: Prisma removed
+
+Prisma (ORM, client generator and Migrate) was removed entirely, and the project standardized on npm.
+
+- **Database access:** `src/lib/calculationsRepo.ts` (insert, list, find, ping) with bind parameters over the shared `pg` pool in `src/lib/db.ts`. The pool logs errors from idle clients instead of crashing (Neon can drop idle connections when it suspends). The API routes and their responses are unchanged.
+- **Migrations:** `db/migrations/0001_init.sql` is the former Prisma migration, unchanged. `src/lib/migrate.ts` applies pending files in order, each in its own transaction, records them in `schema_migrations`, and takes a PostgreSQL advisory lock so concurrent deploys can't race. A database that Prisma Migrate already created (its tables exist but `schema_migrations` is empty) gets `0001_init` recorded as applied instead of run again. `npm run db:migrate` runs it locally, in the Docker `migrate` service and in `vercel-build`.
+- **Tests (test-first):** unit tests for migration file loading (order, naming, duplicates, empty files). Integration tests against PostgreSQL 16: an empty database, idempotent re-runs, adopting a Prisma-created database without losing rows, rollback of a failing file, and two concurrent runs. The existing API integration suite now runs on the new runner and pool.
+- **Removed:** `prisma`, `@prisma/client`, `@prisma/adapter-pg`, `prisma/`, `prisma.config.ts`, the generated client, and the `db:generate` / `db:validate` scripts and CI steps.
+- **Package manager:** npm only. A partial pnpm install, yarn files and Yarn Plug'n'Play loaders (`.pnp.cjs`, which broke ESLint's plugin resolution) were removed and `node_modules` reinstalled with npm.
+- **Security:** a fresh install surfaced `zod@4.1.11` nested under `@vercel/functions` → `@vercel/oidc` → `@vercel/cli-config` (GHSA-mrhx-c7xc-m3w5). An npm `overrides` entry points it at the project's `zod`; `npm audit` reports 0 vulnerabilities.
   - Remote E2E: `E2E_BASE_URL` targets a deployment (no local server). `@db-direct` scenarios (save, comparison, XSS) run only when that deployment's `DATABASE_URL` is supplied. `.github/workflows/preview.yml` runs on each successful preview deployment.
   - A local build with `VERCEL=1` succeeds and produces no standalone output.
 

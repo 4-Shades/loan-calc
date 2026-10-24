@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { getPrisma } from "@/lib/db";
+import { findCalculation } from "@/lib/calculationsRepo";
+import { getPool } from "@/lib/db";
 import { jsonError } from "@/lib/http";
 import { loanInputSchema } from "@/schemas/loanInput";
 import { storedSummarySchema } from "@/schemas/saveCalculation";
@@ -9,7 +10,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) return jsonError(400, "Invalid calculation id");
 
-  const row = await getPrisma().savedCalculation.findUnique({ where: { id } });
+  const row = await findCalculation(getPool(), id);
   if (!row) return jsonError(404, "Calculation not found");
 
   return Response.json({

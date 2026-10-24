@@ -1,4 +1,4 @@
-// Kept free of imports so scripts/vercel-build.mjs and prisma.config.ts can load it directly.
+// Kept free of imports so scripts/vercel-build.mjs and scripts/migrate.mjs can load it directly.
 
 type Env = Record<string, string | undefined>;
 
@@ -8,7 +8,7 @@ function directUrl(env: Env): string | undefined {
 }
 
 /**
- * URL for Prisma migrations (D17): always the direct connection when there is
+ * URL for database migrations (D17): always the direct connection when there is
  * one, because Neon's pooled connection (PgBouncer) can't run migrations. Docker
  * and local PostgreSQL have no pooler, so DATABASE_URL is used there.
  */

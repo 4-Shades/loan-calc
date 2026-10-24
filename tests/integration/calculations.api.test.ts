@@ -1,12 +1,12 @@
-import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { Client } from "pg";
+import { runMigrations } from "@/lib/migrate";
 import { loanInputSchema } from "@/schemas/loanInput";
 
 /**
  * REQ-FUNC-DB01, REQ-NFR-CODE2, REQ-NFR-SEC1, REQ-NFR-SEC2: the real route
- * handlers against a real PostgreSQL 16 with the committed migration applied.
+ * handlers against a real PostgreSQL 16 with the committed migrations applied.
  */
 
 let container: StartedPostgreSqlContainer;
@@ -15,22 +15,20 @@ let routes: typeof import("@/app/api/calculations/route");
 let itemRoute: typeof import("@/app/api/calculations/[id]/route");
 let db: typeof import("@/lib/db");
 
-const MIGRATION = "prisma/migrations/20261021000000_init/migration.sql";
-
 beforeAll(async () => {
   container = await new PostgreSqlContainer("postgres:16-alpine").start();
   process.env.DATABASE_URL = container.getConnectionUri();
   sql = new Client({ connectionString: container.getConnectionUri() });
   await sql.connect();
-  await sql.query(readFileSync(MIGRATION, "utf8"));
-  // Import after DATABASE_URL is set: the Prisma client is created lazily from it.
+  await runMigrations({ connectionString: container.getConnectionUri(), dir: "db/migrations", log: () => {} });
+  // Import after DATABASE_URL is set: the pool is created lazily from it.
   db = await import("@/lib/db");
   routes = await import("@/app/api/calculations/route");
   itemRoute = await import("@/app/api/calculations/[id]/route");
 });
 
 afterAll(async () => {
-  await db?.disconnectPrisma();
+  await db?.closePool();
   await sql?.end();
   await container?.stop();
 });
@@ -239,7 +237,7 @@ describe("GET /api/calculations/:id", () => {
 });
 
 describe("connection pooling (REQ-INT-001)", () => {
-  it("reuses one Prisma client (and its pool) across requests", () => {
-    expect(db.getPrisma()).toBe(db.getPrisma());
+  it("reuses one connection pool across requests", () => {
+    expect(db.getPool()).toBe(db.getPool());
   });
 });
