@@ -8,10 +8,19 @@ describe("databaseSsl (REQ-INT-001: TLS in non-local environments)", () => {
     expect(databaseSsl({ url: remote, nodeEnv: "production" })).toEqual({ rejectUnauthorized: true });
   });
 
-  it.each(["pooled.db.prisma.io", "db.prisma.io"])("requires verified TLS for Prisma Postgres (%s, D15)", (host) => {
-    expect(databaseSsl({ url: `postgres://u:p@${host}:5432/postgres?sslmode=require`, nodeEnv: "production" })).toEqual({
+  it.each([
+    "ep-quiet-sky-a1b2c3d4-pooler.us-east-2.aws.neon.tech",
+    "ep-quiet-sky-a1b2c3d4.us-east-2.aws.neon.tech",
+  ])("requires verified TLS for Neon (%s, D15)", (host) => {
+    expect(databaseSsl({ url: `postgresql://u:p@${host}/neondb?sslmode=require`, nodeEnv: "production" })).toEqual({
       rejectUnauthorized: true,
     });
+  });
+
+  it("requires verified TLS for a Neon host even without sslmode in the URL", () => {
+    expect(
+      databaseSsl({ url: "postgresql://u:p@ep-quiet-sky-a1b2c3d4.us-east-2.aws.neon.tech/neondb", nodeEnv: "production" }),
+    ).toEqual({ rejectUnauthorized: true });
   });
 
   it.each(["localhost", "127.0.0.1", "[::1]", "postgres"])("skips TLS for local host %s", (host) => {

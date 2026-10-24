@@ -26,10 +26,10 @@ These are defaults I would use. Items marked **Open** come from TDD §8 and need
 | D12 | Fees on term/SBA loans | Deducted from proceeds: payments on the full amount, fees in a period-0 closing row, Effective APR on net proceeds. Applies to all business loan types | Decided |
 | D13 | Auth | None. The SRS defines no users; saved calculations are global | Per SRS |
 | D14 | Hosting | Vercel for production and per-PR preview deployments. Docker Compose stays for self-hosting and REQ-INT-002 | Decided |
-| D15 | Database on Vercel | **Prisma Postgres** (Vercel Marketplace) through the existing `pg` adapter: pooled host `pooled.db.prisma.io` for the app (`DATABASE_URL`), direct host `db.prisma.io` for migrations (`DIRECT_URL`), TLS required | Decided |
+| D15 | Database on Vercel | **Neon** (serverless PostgreSQL, via the Vercel Marketplace integration), replacing Prisma Postgres. Through the existing `pg` pool and Prisma ORM: the **pooled** connection string (host contains `-pooler`) for the app (`DATABASE_URL`), the **direct/unpooled** one for migrations (`DIRECT_URL`, which the Neon integration also provides as `DATABASE_URL_UNPOOLED`), `sslmode=require`. Neon is only the host: the ORM stays Prisma (SRS §1.3 allows Prisma or Drizzle) | Decided (changed from Prisma Postgres) |
 | D16 | Rate limiting on Vercel | **Upstash Redis** (Vercel Marketplace) behind a `RateLimiter` interface: an atomic Lua sliding window, same semantics as the in-memory store (which stays for Docker and tests). Fails open if Redis is down | Decided |
-| D17 | Migrations on Vercel | **Changed in Slice 9:** `prisma migrate deploy` inside `vercel-build` (Prisma's documented approach), against that environment's own `DIRECT_URL`. Safe because previews have their own database (D18); the build refuses to run without an explicit `DIRECT_URL`. Avoids fighting Vercel's automatic promotion | Decided |
-| D18 | Preview databases | **One shared preview database** (a second Prisma Postgres database scoped to Vercel's Preview environment). Prisma Postgres has no automatic per-preview branching; previews share data and schema | Decided |
+| D17 | Migrations on Vercel | `prisma migrate deploy` inside `vercel-build` (Prisma's documented approach), against that environment's own direct URL. Safe because every preview has its own Neon branch (D18); the build refuses to run without an explicit direct URL. Avoids fighting Vercel's automatic promotion | Decided |
+| D18 | Preview databases | **A Neon branch per preview deployment** (`preview/<git-branch>`), created by the Neon–Vercel integration as a copy-on-write branch of production, with its connection strings injected into that deployment only. Neon deletes it when Vercel removes the deployment, which under Vercel's default retention can be months later. Previews never touch production data or each other. Replaces the shared preview database | Decided (changed) |
 
 ---
 
@@ -78,9 +78,10 @@ Dockerfile  docker-compose.yml  .github/workflows/ci.yml
 
 ```
                 ┌─ Vercel (D14): production on main, a preview per PR ─────────────┐
-GitHub ─ push ──┤  Next.js build (no standalone output) → Functions + edge CDN     ├──► managed PostgreSQL (D15)
+GitHub ─ push ──┤  Next.js build (no standalone output) → Functions + edge CDN     ├──► Neon PostgreSQL (D15)
                 └──────────────────────────────────────────────────────────────────┘     pooled URL for the app,
-                                                                                          direct URL for migrations (D17)
+                                                                                          direct URL for migrations (D17);
+                                                                                          a branch per preview (D18)
 Self-hosted ──── docker compose up --build: postgres → migrate → app (SRS §3.5, REQ-INT-002)
 ```
 
@@ -238,14 +239,14 @@ SRS §3.5 requires deployment with Docker Compose, so Vercel is an *additional* 
   - `next.config.ts`: `output: process.env.VERCEL ? undefined : "standalone"`. Security headers already come from `next.config.ts`, so they apply on Vercel unchanged.
   - `RateLimiter` interface with an async `check`, plus `memory` and `redis` implementations chosen by environment variables (e.g. `RATE_LIMIT_STORE`, plus the store's URL and token). The API route awaits it.
   - `db.ts`: small pool per function instance (`DATABASE_POOL_MAX`, e.g. 3) on the pooled connection string. Idle clients are released when an instance suspends; Vercel provides a helper for this in `@vercel/functions` (check the current API when implementing).
-  - `prisma.config.ts`: migrations use `DIRECT_URL` when it is set (`process.env.DIRECT_URL ?? process.env.DATABASE_URL`); the app keeps using the pooled `DATABASE_URL`.
+  - `prisma.config.ts`: migrations use the direct URL when set (`DIRECT_URL ?? DATABASE_URL_UNPOOLED ?? DATABASE_URL`); the app keeps using the pooled `DATABASE_URL`. The pooled Neon connection runs PgBouncer in transaction mode, so the app must not rely on session state (it doesn't).
   - Vercel project settings:
     - Next.js framework preset, Node 24.
     - Function region co-located with the database.
-    - Environment variables per environment (Production, Preview, Development): `DATABASE_URL` (pooled), `DIRECT_URL`, rate-limit store credentials. The local `.env` is never uploaded.
+    - Environment variables per environment (Production, Preview, Development): `DATABASE_URL` (pooled), `DIRECT_URL` (or `DATABASE_URL_UNPOOLED`), rate-limit store credentials. With the Neon integration the database variables are injected per environment, and Preview deployments get their branch's strings. The local `.env` is never uploaded.
   - CI:
     - Vercel's Git integration builds a preview per PR and production from `main`.
-    - A GitHub Actions job runs `prisma migrate deploy` against `DIRECT_URL` before production promotion (D17).
+    - Migrations run in `vercel-build`, per environment (D17): a preview migrates its own Neon branch, production migrates the main branch.
     - On a successful preview deployment, the E2E suite (BDD + specs) and the Lighthouse budget run against the preview URL. If Vercel Deployment Protection is on, they send Vercel's protection-bypass token for automation.
   - HTTPS: Vercel serves HTTPS and HSTS on its domains, which covers what Slice 8 left to a reverse proxy. Confirm the HSTS setting for any custom domain.
   - Docs: a "Deploy to Vercel" section in the README, covering env vars, region, migrations and preview databases.
@@ -254,8 +255,16 @@ SRS §3.5 requires deployment with Docker Compose, so Vercel is an *additional* 
   - Production serves `/api/health` with `200` against the managed database.
   - The rate limit holds across function instances: the contract tests pass against Redis, and the 429 scenario passes on the preview.
   - The Docker Compose smoke test still passes.
+- **Neon rework: done.** Checked against Neon's current Vercel integration docs: it injects `DATABASE_URL` (pooled, PgBouncer) and `DATABASE_URL_UNPOOLED` (direct). Changes made:
+  - `deployEnv.ts`: `migrationUrl()` (`DIRECT_URL` → `DATABASE_URL_UNPOOLED` → `DATABASE_URL`), used by `prisma.config.ts`. The `vercel-build` guard accepts either direct name and refuses a `-pooler` host as the direct URL. Tests cover all of these.
+  - `dbConfig` tests: Neon pooled and direct hosts get verified TLS, with or without `sslmode` in the URL (no code change was needed).
+  - `deployment.ts`: `connectionTimeoutMillis` 15 s on Vercel (a suspended Neon compute must start first), 5 s on Docker (previously no timeout).
+  - README "Deploy to Vercel" now describes the Neon integration: the production branch plus a branch per preview.
+  - `.env.example`: Neon-style example URLs.
+  - Nothing in the application code, the schema or the migrations changes: Neon is standard PostgreSQL 16+.
+  - Still to confirm on the first real preview: that the branch's variables are present during the build (when `vercel-build` migrates), not only at runtime.
 - **Status:** code and tests done; deployment not yet performed (needs your Vercel project, see the README checklist). What changed against the plan above:
-  - D17 switched to migrating inside `vercel-build` (see the decisions table); there is no separate CI migration job.
+  - D17 switched to migrating inside `vercel-build` (see the decisions table); there is no separate CI migration job. (The Prisma Postgres code pass also assumed a shared preview database; with Neon, D18 is a branch per preview.)
   - The rate-limit contract (5 behavioral cases) runs against the memory store in unit tests and against real Redis 7 behind an Upstash-compatible REST proxy (SRH) in integration tests. The SRH image is community-maintained and was last updated in 2024; it is used only in tests.
   - On Vercel, `clientIp` trusts `x-vercel-forwarded-for`: Vercel documents that it overwrites the forwarding headers, so the spoofing caveat for Docker doesn't apply there.
   - `db.ts` now builds a `pg` `Pool` (5 connections, 5 s idle timeout on Vercel; 10 / 10 s on Docker) and calls `attachDatabasePool` on Vercel.
@@ -277,8 +286,10 @@ SRS §3.5 requires deployment with Docker Compose, so Vercel is an *additional* 
 | SRS §3.5 requires Docker Compose; Vercel is a different runtime | Keep both targets from the same code; the Compose smoke test stays in CI so the SRS path never regresses |
 | On Vercel each serverless instance would count requests separately, so 60/min per IP wouldn't hold | Shared rate-limit store behind one interface (D16); contract tests run against both stores |
 | Serverless instances exhausting PostgreSQL connections | Pooled connection string, small per-instance pool, idle clients released on suspend |
-| Preview deployments migrating or polluting production data | Each environment migrates only its own `DIRECT_URL` (D17); Preview env vars point at the shared preview database (D18). A preview that inherited production variables would touch production, so set Preview-scoped values first |
-| Shared preview database: one PR's migration affects every preview | Accepted with D18; write migrations expand-then-contract |
+| Preview deployments migrating or polluting production data | Each environment migrates only its own direct URL (D17); each preview gets its own Neon branch (D18). If the integration is set up wrongly and a preview inherits production variables, it would touch production, so confirm the first preview's `DATABASE_URL` host differs from production before merging |
+| Neon compute scales to zero when idle, so the first query after a pause is slower | Calculations run in the browser, so PERF1 is unaffected; only the first save/list after idle waits. Generous connection timeout; on a paid plan, disable scale-to-zero for production if the delay matters |
+| Preview branches copy production data | Copy-on-write branches start with production's rows. Acceptable here (saved calculations hold no personal data); revisit before adding users or sensitive data |
+| Branch-per-preview depends on the Neon–Vercel integration and its plan limits; branches live until Vercel removes the deployment | Delete stale `preview/*` branches in the Neon console, shorten Vercel's deployment retention, or fall back to one shared staging branch |
 | Cold starts on API routes | Calculations run in the browser, so PERF1 is unaffected; only save/list latency changes. Co-locate the function region with the database |
 | E2E steps that write SQL directly can't reach a remote database | Tag them `@db-direct` and skip them for remote runs, or provide a preview database secret |
 | E2E flakiness on timing assertions | Measure with `performance.measure` in-page, use p95 over many samples, fixed CI profile |

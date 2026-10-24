@@ -30,10 +30,10 @@ Vercel is a second deployment target next to Docker Compose. The same code runs 
 **One-time setup** (in the Vercel dashboard):
 
 1. Import the GitHub repository as a Vercel project (framework preset: Next.js; Node.js 24).
-2. Add **Prisma Postgres** from the Vercel Marketplace for **Production**. Set:
-   - `DATABASE_URL` to the **pooled** string (`pooled.db.prisma.io`), used by the app;
-   - `DIRECT_URL` to the **direct** string (`db.prisma.io`), used only for migrations.
-3. Create a **second** Prisma Postgres database for previews. Set its `DATABASE_URL` and `DIRECT_URL` for the **Preview** environment only, so previews never touch production data. All previews share this database.
+2. Add **Neon** from the Vercel Marketplace (or connect an existing Neon project) for **Production**. The integration injects:
+   - `DATABASE_URL`: the **pooled** connection (host contains `-pooler`), used by the app;
+   - `DATABASE_URL_UNPOOLED`: the **direct** connection, used only for migrations. `DIRECT_URL` works too if you set the variables yourself.
+3. In the Neon integration settings, enable **Create database branch for deployment** for **Preview**. Each preview deployment then gets its own branch (`preview/<git-branch>`, copied from production) with its own connection strings, so previews never touch production data or each other. Neon deletes a preview branch when Vercel removes the deployment, which by default can be months later; delete stale branches in the Neon console if you hit branch limits.
 4. Add **Upstash Redis** from the Marketplace for Production and Preview. It injects `KV_REST_API_URL` and `KV_REST_API_TOKEN`; `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` also work. Rate limits are then shared by every function instance.
 5. Pick a function region close to the database region.
 6. For the preview checks in GitHub Actions:
@@ -43,7 +43,7 @@ Vercel is a second deployment target next to Docker Compose. The same code runs 
 **What happens on deploy:** Vercel runs `npm run vercel-build`, which does three things:
 
 1. It stops with a list of anything missing among the variables above.
-2. It runs `prisma migrate deploy` against `DIRECT_URL`, which is the database for that environment only.
+2. It runs `prisma migrate deploy` against the direct URL, which is that deployment's own database: the production branch, or the preview's branch. It refuses a pooled (`-pooler`) host.
 3. It builds the app.
 
 Write migrations expand-then-contract, so that the deployment still serving traffic keeps working while a new one migrates.
@@ -86,7 +86,7 @@ Rate limiting is in memory, per process, on Docker. On Vercel the counts live in
 | `npm run test:coverage` | Unit + component tests with coverage gates (engine 90%, overall 80%) |
 | `npm run test:integration` | API route handlers against PostgreSQL 16, and the rate-limit contract against Redis 7, in Testcontainers (needs Docker) |
 | `npm run test:perf` | Engine performance budgets (REQ-NFR-PERF1), run on their own |
-| `npm run vercel-build` | What Vercel runs: env check, `prisma migrate deploy` (via `DIRECT_URL`), build. Not for local use |
+| `npm run vercel-build` | What Vercel runs: env check, `prisma migrate deploy` (via `DATABASE_URL_UNPOOLED` / `DIRECT_URL`), build. Not for local use |
 | `npm run test:e2e` | Playwright against a fresh production build on port 3100: BDD scenarios from `features/*.feature` plus responsive, accessibility (axe, WCAG 2.1 AA) and security specs (needs `DATABASE_URL`, e.g. `npm run db:up`) |
 | `npm run test:compose` | Systems test: builds and runs the full Compose stack as a throwaway project (REQ-INT-002) |
 | `npm run test:lighthouse` | Lighthouse desktop preset, median of 3 runs; fails if First Contentful Paint ≥ 1.2 s (REQ-NFR-PERF2). Needs Chrome, or set `CHROME_PATH` (e.g. to Edge) |

@@ -15,6 +15,7 @@ export interface PoolConfig {
   ssl: SslSetting;
   max: number;
   idleTimeoutMillis: number;
+  connectionTimeoutMillis: number;
 }
 
 /**
@@ -22,6 +23,8 @@ export interface PoolConfig {
  * process with a 10-connection pool. Each Vercel function instance keeps a small
  * pool with a short idle timeout, on the pooled connection string, so many
  * instances don't exhaust the database (Vercel advises against a pool of 1).
+ * Connecting may wait up to 15 s on Vercel, because an idle Neon compute is
+ * suspended and has to start before it accepts the first connection.
  */
 export function poolConfig({ url, env }: { url: string; env: Env }): PoolConfig {
   const onVercel = Boolean(env.VERCEL);
@@ -34,5 +37,6 @@ export function poolConfig({ url, env }: { url: string; env: Env }): PoolConfig 
     ssl: databaseSsl({ url, nodeEnv: env.NODE_ENV, override: env.DATABASE_SSL }),
     max,
     idleTimeoutMillis: onVercel ? 5_000 : 10_000,
+    connectionTimeoutMillis: onVercel ? 15_000 : 5_000,
   };
 }
