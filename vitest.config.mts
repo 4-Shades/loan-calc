@@ -10,7 +10,7 @@ export default defineConfig({
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
       exclude: ["src/**/*.d.ts", "src/app/layout.tsx"],
-      // Gates from tdd_design.md §1.1 / §10.
+      // Gates from docs/tdd_design.md §1.1 / §10.
       thresholds: {
         lines: 80,
         "src/engine/**": { lines: 90 },

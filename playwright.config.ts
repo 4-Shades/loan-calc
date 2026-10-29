@@ -3,7 +3,7 @@ import "dotenv/config";
 import { defineConfig, devices } from "@playwright/test";
 import { defineBddConfig } from "playwright-bdd";
 
-// BDD acceptance tests: the .feature files are the source of truth (tdd_design.md §7).
+// BDD acceptance tests: the .feature files are the source of truth (docs/tdd_design.md §7).
 // Scenarios without step definitions yet are skipped rather than failing generation;
 // each slice adds steps and turns its scenarios green.
 const bddTestDir = defineBddConfig({

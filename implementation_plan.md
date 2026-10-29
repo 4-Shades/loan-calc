@@ -1,7 +1,7 @@
 # Implementation Plan
 ## LoanCalc-SPA: Multi-Type Loan & Amortization Engine
 
-**Inputs:** `software_requirements_specification.md` (SRS v1.1.0), `gherkin_bdd_feature_specs.md` (BDD), `tdd_design.md` (TDD)
+**Inputs:** `docs/software_requirements_specification.md` (SRS v1.1.0), `docs/gherkin_bdd_feature_specs.md` (BDD), `docs/tdd_design.md` (TDD)
 
 **SRS v1.1.0 (October 24, 2026)** replaced the ORM with the native `pg` driver (§1.3, REQ-INT-001), required parameterized SQL (REQ-NFR-SEC1), and changed Dockerfile Stage 2 to run SQL migration scripts (§3.5.2). This matches what was built when Prisma was removed (see "After Slice 9: Prisma removed"), so no code changes followed. Functional requirements are unchanged.
 **Approach:** vertical slices, test-first. Each slice starts with failing tests from the TDD plan and ends with them green.

@@ -1,5 +1,5 @@
 # Language: en
-# Source: gherkin_bdd_feature_specs.md (SRS v1.1.0, LoanCalc-SPA)
+# Source: docs/gherkin_bdd_feature_specs.md (SRS v1.1.0, LoanCalc-SPA)
 
 @calculator @business_loans
 Feature: Business Loan Engine & Effective APR Calculations

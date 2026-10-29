@@ -4,9 +4,9 @@ Multi-type loan & amortization engine: a single-page Next.js app backed by Postg
 
 | Document | Purpose |
 | :--- | :--- |
-| [software_requirements_specification.md](software_requirements_specification.md) | Requirements (SRS v1.0.0) |
-| [gherkin_bdd_feature_specs.md](gherkin_bdd_feature_specs.md) | BDD scenarios; executable copies live in [features/](features/) |
-| [tdd_design.md](tdd_design.md) | Test strategy and traceability |
+| [docs/software_requirements_specification.md](docs/software_requirements_specification.md) | Requirements (SRS v1.1.0) |
+| [docs/gherkin_bdd_feature_specs.md](docs/gherkin_bdd_feature_specs.md) | BDD scenarios; executable copies live in [features/](features/) |
+| [docs/tdd_design.md](docs/tdd_design.md) | Test strategy and traceability |
 | [implementation_plan.md](implementation_plan.md) | Slice-by-slice delivery plan |
 
 ## Requirements
